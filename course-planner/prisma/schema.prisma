@@ -1,0 +1,60 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Course {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  description      String
+  credits          Float
+  department       String
+  level            String
+  prerequisites    String[]
+  term             String[]
+  gradeDistribution Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  semesters        SemesterCourse[]
+}
+
+model AcademicYear {
+  id         String     @id @default(cuid())
+  yearName   String
+  startYear  Int
+  semesters  Semester[]
+  planId     String
+  plan       AcademicPlan @relation(fields: [planId], references: [id])
+}
+
+model Semester {
+  id            String           @id @default(cuid())
+  term          String
+  year          Int
+  academicYearId String
+  academicYear   AcademicYear    @relation(fields: [academicYearId], references: [id])
+  courses        SemesterCourse[]
+}
+
+model SemesterCourse {
+  id         String   @id @default(cuid())
+  courseId   String
+  semesterId String
+  course     Course   @relation(fields: [courseId], references: [id])
+  semester   Semester @relation(fields: [semesterId], references: [id])
+}
+
+model AcademicPlan {
+  id           String         @id @default(cuid())
+  userId       String         @unique
+  years        AcademicYear[]
+  savedCourses Json
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
