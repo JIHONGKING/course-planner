@@ -1,203 +1,191 @@
-import { useState, useMemo, useEffect } from 'react';
+// src/components/course-planner/CourseSelectionModal.tsx
+import { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
-import { Search, X, Filter, AlertCircle, Check } from 'lucide-react';
-import type { Course } from '@/src/types/course';
-import { COURSE_LEVELS, DEPARTMENTS } from '@/src/data/constants';
+import { Search, X, Filter } from 'lucide-react';
+import type { Course } from '@/types/course';
 
 interface CourseSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (course: Course) => void;
-  courses: Course[];
-  currentCourses: Course[];
-  semesterId: string;
+  currentSemesterCourses?: Course[];
 }
 
 export default function CourseSelectionModal({
   isOpen,
   onClose,
   onSelect,
-  courses: initialCourses, // 이름 변경: initialCourses
-  currentCourses,
-  semesterId
+  currentSemesterCourses = []
 }: CourseSelectionModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [filters, setFilters] = useState({
-    level: '',
     department: '',
-    credits: 'all'
+    level: '',
   });
-  const [courses, setCourses] = useState<Course[]>(initialCourses); // courses 상태 변수 추가
 
   useEffect(() => {
-    setCourses(initialCourses); // initialCourses를 사용하여 courses 상태 초기화
-  }, [initialCourses]); // initialCourses가 변경될 때마다 useEffect 실행
+    const searchCourses = async () => {
+      if (!searchTerm) {
+        setCourses([]);
+        return;
+      }
+      
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          query: searchTerm,
+          page: String(page),
+          ...filters
+        });
 
-  const filteredCourses = useMemo(() => {
-    return courses.filter(course => {
-      const matchesSearchTerm = 
-        course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.department.toLowerCase().includes(searchTerm.toLowerCase());
+        const response = await fetch(`/api/courses?${params}`);
+        const data = await response.json();
+        setCourses(data.courses);
+        setTotalPages(data.totalPages);
+      } catch (error) {
+        console.error('Failed to search courses:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      const matchesLevel = !filters.level || course.level === filters.level;
-      const matchesDepartment = !filters.department || course.department.toLowerCase().includes(filters.department.toLowerCase());
-      const matchesCredits = 
-        filters.credits === 'all' ||
-        (filters.credits === 'under 4' && course.credits < 4) ||
-        (filters.credits === '4+' && course.credits >= 4);
+    const timer = setTimeout(searchCourses, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, page, filters]);
 
-      return matchesSearchTerm && matchesLevel && matchesDepartment && matchesCredits;
-    });
-  }, [courses, searchTerm, filters]);
-
-  const handleCourseSelect = (course: Course) => {
-    setSelectedCourse(course);
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
   };
 
-  const handleConfirm = () => {
-    if (selectedCourse) {
-      onSelect(selectedCourse);
-      onClose();
-      setSelectedCourse(null);
-    }
+  const isCourseInSemester = (courseId: string) => {
+    return currentSemesterCourses.some(course => course.id === courseId);
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
-      onClose={onClose}
-      className="relative z-50"
-    >
+    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
 
-      <div className="fixed inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
-          <Dialog.Panel className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-4">
-              <Dialog.Title className="text-lg font-medium">
-                Select Course
-              </Dialog.Title>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-500"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel className="mx-auto max-w-2xl w-full bg-white rounded-xl shadow-lg p-6">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-4">
+            <Dialog.Title className="text-lg font-medium">
+              Search Courses
+            </Dialog.Title>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-            {/* Search Bar */}
-            <div className="relative mb-4">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
-              </div>
+          {/* Search Bar */}
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search courses..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-10 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by course name, code, or description"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
               />
-              <button
-                onClick={() => setFilterOpen(!filterOpen)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3"
-              >
-                <Filter className="h-5 w-5 text-gray-400 hover:text-gray-500" />
-              </button>
             </div>
+          </div>
 
-            {/* Filters */}
-            {filterOpen && (
-              <div className="mb-4 border border-gray-200 rounded-md p-4">
-                <h3 className="font-medium text-gray-700 mb-2">Filters</h3>
-                <div className="space-y-2">
-                  <div>
-                    <label htmlFor="level" className="block text-sm font-medium text-gray-700">
-                      Level
-                    </label>
-                    <select
-                      id="level"
-                      value={filters.level}
-                      onChange={e => setFilters({ ...filters, level: e.target.value })}
-                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md"
-                    >
-                      <option value="">All Levels</option>
-                      {COURSE_LEVELS.map(level => (
-                        <option key={level.id} value={level.id}>
-                          {level.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+          {/* Filters */}
+          <div className="mb-4 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Department
+              </label>
+              <select
+                value={filters.department}
+                onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md p-2"
+              >
+                <option value="">All Departments</option>
+                <option value="COMP SCI">Computer Science</option>
+                <option value="MATH">Mathematics</option>
+                <option value="STAT">Statistics</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Level
+              </label>
+              <select
+                value={filters.level}
+                onChange={(e) => setFilters(prev => ({ ...prev, level: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md p-2"
+              >
+                <option value="">All Levels</option>
+                <option value="100">100 Level</option>
+                <option value="200">200 Level</option>
+                <option value="300">300 Level</option>
+                <option value="400">400 Level</option>
+                <option value="500">500 Level</option>
+              </select>
+            </div>
+          </div>
 
-                  <div>
-                    <label htmlFor="department" className="block text-sm font-medium text-gray-700">
-                      Department
-                    </label>
-                    <select
-                      id="department"
-                      value={filters.department}
-                      onChange={e => setFilters({ ...filters, department: e.target.value })}
-                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md"
-                    >
-                      <option value="">All Departments</option>
-                      {DEPARTMENTS.map(department => (
-                        <option key={department.id} value={department.id}>
-                          {department.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Add other filters here (e.g., credits) */}
-                </div>
+          {/* Course List */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {loading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full mx-auto" />
               </div>
-            )}
-
-            {/* Course List */}
-            <ul className="max-h-96 overflow-y-auto">
-              {filteredCourses.map(course => (
-                <li
+            ) : courses.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">
+                {searchTerm ? 'No courses found' : 'Start typing to search courses'}
+              </div>
+            ) : (
+              courses.map((course) => (
+                <div
                   key={course.id}
-                  onClick={() => handleCourseSelect(course)}
-                  className={`cursor-pointer p-3 rounded-md hover:bg-gray-100 ${
-                    selectedCourse?.id === course.id ? 'bg-gray-200' : ''
+                  onClick={() => !isCourseInSemester(course.id) && onSelect(course)}
+                  className={`p-4 border border-gray-200 rounded-md hover:bg-gray-50 ${
+                    isCourseInSemester(course.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <h4 className="font-medium text-gray-900">{course.id}</h4>
-                      <p className="text-sm text-gray-500">{course.title}</p>
+                      <h3 className="font-medium text-gray-900">{course.code}</h3>
+                      <p className="text-sm text-gray-500">{course.name}</p>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-700">{course.credits} cr</span>
-                      {currentCourses.some(c => c.id === course.id) && (
-                        <AlertCircle className="h-4 w-4 text-yellow-500" /> 
-                      )}
-                      {selectedCourse?.id === course.id && (
-                        <Check className="h-4 w-4 text-green-500" />
-                      )}
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{course.credits} Credits</div>
+                      <div className="text-xs text-green-600">
+                        A: {JSON.parse(course.gradeDistribution).A.toFixed(1)}%
+                      </div>
                     </div>
                   </div>
-                </li>
-              ))}
-            </ul>
+                </div>
+              ))
+            )}
+          </div>
 
-            {/* Confirm Button */}
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={handleConfirm}
-                disabled={!selectedCourse}
-                className="disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                Confirm
-              </button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-2 mt-4">
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => handlePageChange(i + 1)}
+                  className={`px-3 py-1 rounded-md ${
+                    page === i + 1
+                      ? 'bg-red-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
             </div>
-          </Dialog.Panel>
-        </div>
+          )}
+        </Dialog.Panel>
       </div>
     </Dialog>
   );

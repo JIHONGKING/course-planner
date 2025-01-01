@@ -1,8 +1,8 @@
 // src/hooks/useAcademicPlan.ts
-import { useState, useCallback, useEffect } from 'react';
-import type { Course, AcademicYear } from '@/src/types/course';
+import { useState, useCallback } from 'react';
+import type { Course, AcademicYear, Semester } from '@/types/course';
 
-const initialYears: AcademicYear[] = []; // 초기값 설정
+const initialYears: AcademicYear[] = [];
 
 export function useAcademicPlan() {
   const [years, setYears] = useState<AcademicYear[]>(initialYears);
@@ -10,39 +10,29 @@ export function useAcademicPlan() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const addCourse = useCallback((yearId: string, semesterId: string, course: Course) => {
+  const addCourse = useCallback((semester: Semester, course: Course) => {
     setYears(prevYears => 
-      prevYears.map(year => {
-        if (year.id !== yearId) return year;
-        return {
-          ...year,
-          semesters: year.semesters.map(semester => {
-            if (semester.id !== semesterId) return semester;
-            return {
-              ...semester,
-              courses: [...semester.courses, course]
-            };
-          })
-        };
-      })
+      prevYears.map(year => ({
+        ...year,
+        semesters: year.semesters.map(sem => 
+          sem.id === semester.id
+            ? { ...sem, courses: [...sem.courses, course] }
+            : sem
+        )
+      }))
     );
   }, []);
 
-  const removeCourse = useCallback((yearId: string, semesterId: string, courseId: string) => {
+  const removeCourse = useCallback((semester: Semester, courseId: string) => {
     setYears(prevYears =>
-      prevYears.map(year => {
-        if (year.id !== yearId) return year;
-        return {
-          ...year,
-          semesters: year.semesters.map(semester => {
-            if (semester.id !== semesterId) return semester;
-            return {
-              ...semester,
-              courses: semester.courses.filter(course => course.id !== courseId)
-            };
-          })
-        };
-      })
+      prevYears.map(year => ({
+        ...year,
+        semesters: year.semesters.map(sem =>
+          sem.id === semester.id
+            ? { ...sem, courses: sem.courses.filter(course => course.id !== courseId) }
+            : sem
+        )
+      }))
     );
   }, []);
 

@@ -1,3 +1,5 @@
+// src/types/course.ts
+
 export interface Course {
   id: string;
   code: string;
@@ -39,7 +41,7 @@ export type ClassStanding = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';
 export interface UserPreferences {
   school: string;
   major: string;
-  classStanding: string; // string으로 변경
+  classStanding: string;
   graduationYear: string;
   planningStrategy: 'GPA' | 'Workload' | 'Balance';
 }

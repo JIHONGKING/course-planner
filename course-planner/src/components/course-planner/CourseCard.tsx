@@ -1,5 +1,15 @@
 import { X } from 'lucide-react';
-import type { Course } from '@/src/types/course';
+
+interface Course {
+  code: string;
+  name: string;
+  credits: number;
+  gradeDistribution: {
+    A: number;
+    // 다른 등급들도 추가할 수 있습니다.
+  };
+  prerequisites: string[];
+}
 
 interface CourseCardProps {
   course: Course;

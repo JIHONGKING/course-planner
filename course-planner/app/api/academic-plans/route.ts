@@ -1,54 +1,39 @@
 // app/api/academic-plans/route.ts
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import prisma from '../../../lib/prisma';
+import type { Course } from '@/types/course';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
-
-  try {
-    const plan = await prisma.academicPlan.findUnique({
-      where: { userId: userId as string },
-      include: {
-        years: {
-          include: {
-            semesters: {
-              include: {
-                courses: true
-              }
-            }
-          }
-        }
-      }
-    });
-    
-    return NextResponse.json(plan);
-  } catch (error) {
-    console.error('Failed to fetch academic plan:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch academic plan' },
-      { status: 500 }
-    );
-  }
+interface AcademicPlanCreateInput {
+  userId: string;
+  years: {
+    startYear: number;
+    yearName: string;
+    semesters: {
+      term: string;
+      year: number;
+    }[];
+  }[];
+  savedCourses: Course[];
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, years } = body;
+    const { userId, years, savedCourses } = body as AcademicPlanCreateInput;
 
     const plan = await prisma.academicPlan.create({
       data: {
         userId,
         years: {
-          create: years.map((year: any) => ({
+          create: years.map((year) => ({
             startYear: year.startYear,
             yearName: year.yearName,
             semesters: {
               create: year.semesters
             }
           }))
-        }
+        },
+        savedCourses: JSON.stringify(savedCourses)
       }
     });
     

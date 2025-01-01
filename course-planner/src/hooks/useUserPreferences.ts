@@ -1,5 +1,6 @@
+// src/hooks/useUserPreferences.ts
 import { useState, useCallback, useEffect } from 'react';
-import type { UserPreferences } from '@/src/types/course';
+import type { UserPreferences } from '@/types/course';
 
 const LOCAL_STORAGE_KEY = 'user-preferences';
 
@@ -18,29 +19,28 @@ export function useUserPreferences() {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        return { ...defaultPreferences, ...parsed };
+        return { ...defaultPreferences, ...JSON.parse(saved) };
       } catch (e) {
         console.error('Failed to parse saved preferences:', e);
+        return defaultPreferences;
       }
     }
     return defaultPreferences;
   });
 
-  // Save to localStorage whenever preferences change
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(preferences));
   }, [preferences]);
 
-  const updatePreference = useCallback(<K extends keyof UserPreferences>(
-    key: K,
-    value: UserPreferences[K]
-  ) => {
-    setPreferences(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  }, []);
+  const updatePreference = useCallback(
+    <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
+      setPreferences(prev => ({
+        ...prev,
+        [key]: value
+      }));
+    },
+    []
+  );
 
   const resetPreferences = useCallback(() => {
     setPreferences(defaultPreferences);

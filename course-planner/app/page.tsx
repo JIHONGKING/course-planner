@@ -1,23 +1,27 @@
+// app/page.tsx
 'use client';
 
-import React from 'react';
-import { useState } from 'react';
-import { Search, Wand2, ChevronDown, X, Plus, Trash2, GraduationCap, Book, School } from 'lucide-react';
-import SearchBar from '@/components/ui/SearchBar';  // 경로 수정
-import CourseList from '@/components/course-planner/CourseList';
-import FilterSection from '@/components/ui/FilterSection';  // CourseFilters 대신 FilterSection 사용
+import React, { useState } from 'react';
+import { Wand2, ChevronDown, X, Plus, Trash2, Search } from 'lucide-react';
+import { useCourses } from '@/hooks/useCourses';
 
 export default function Home() {
-  const [isPlanGenerated, setIsPlanGenerated] = useState(false);  
+  const [isPlanGenerated, setIsPlanGenerated] = useState(false);
+  const { courses, loading, error, searchCourses } = useCourses();
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setHasSearched(true);
+    await searchCourses(searchQuery);
+  };
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Fixed Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 z-10 py-4">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 py-4">
         <div className="container mx-auto px-6">
-          <SearchBar />
-          <CourseFilters />
-          <CourseList />
-          {/* Schools and Major Selection */}
           <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">School/College</label>
@@ -68,8 +72,9 @@ export default function Home() {
                   <option>Balance Workload</option>
                   <option>Mix Required/Electives</option>
                 </select>
-                <button className="flex items-center space-x-2 bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 shadow-sm"
-                  onClick={() => setIsPlanGenerated(true)} // 계획 생성 state 업데이트
+                <button 
+                  className="flex items-center space-x-2 bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 shadow-sm"
+                  onClick={() => setIsPlanGenerated(true)}
                 >
                   <Wand2 className="h-4 w-4" />
                   <span>Auto Fill Plan</span>
@@ -78,67 +83,102 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Enhanced Search Bar */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
-            </div>
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="relative mb-4">
             <input
               type="text"
-              placeholder="Search courses by name, number, subject, or instructor (e.g. COMP SCI 540, CS 577, Data Structures)"
-              className="w-full pl-10 pr-16 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search courses by name, number, or instructor"
+              className="w-full pl-10 pr-4 py-2 border rounded-md"
             />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
-              <button className="p-1 hover:text-red-600" title="Search by Requirements">
-                <GraduationCap className="h-5 w-5" />
-              </button>
-              <button className="p-1 hover:text-red-600" title="Search by Course Level">
-                <Book className="h-5 w-5" />
-              </button>
-              <button className="p-1 hover:text-red-600" title="Search by Department">
-                <School className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
+            <button
+              type="submit"
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </form>
 
-          {/* Search Filters */}
-          <div className="flex items-center space-x-4 mt-2 text-sm">
-            <button className="text-gray-600 hover:text-red-600">
-              + Add Course Requirements Filter
-            </button>
-            <button className="text-gray-600 hover:text-red-600">
-              + Add Time/Day Filter
-            </button>
-            <button className="text-gray-600 hover:text-red-600">
-              + Add Professor Filter
-            </button>
+          {/* Course List */}
+          <div className="space-y-2">
+            {loading && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
+              </div>
+            )}
+
+            {error && (
+              <div className="text-center py-8 text-red-500">
+                Failed to load courses. Please try again.
+              </div>
+            )}
+
+            {!hasSearched && (
+              <div className="text-center py-8 text-gray-500">
+                Search for courses to begin
+              </div>
+            )}
+            {hasSearched && !loading && !error && courses.map((course) => (
+              <div 
+                key={course.id}
+                className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-medium text-gray-900">{course.code}</h3>
+                      <span className="px-2 py-0.5 text-sm bg-gray-100 rounded-full text-gray-600">
+                        {course.credits} credits
+                      </span>
+                    </div>
+                    <p className="mt-1 text-gray-600">{course.name}</p>
+                    {course.description && (
+                      <p className="mt-1 text-sm text-gray-500">{course.description}</p>
+                    )}
+                  </div>
+                  <div className="ml-4 text-right">
+                  {course.gradeDistribution && (
+  <div className="text-sm text-green-600 font-medium">
+    A: {JSON.parse(course.gradeDistribution).A}%
+  </div>
+)}
+                    <div className="text-sm text-gray-500 mt-1">
+                      {course.term.join(', ')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
       <main className="container mx-auto px-6 py-8">
         {/* Auto Fill Preview Banner */}
-        <div className="mb-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <Wand2 className="h-5 w-5 text-blue-500" />
-              <div>
-                <h3 className="font-medium text-gray-900">4-Year Plan Generated</h3>
-                <p className="text-sm text-gray-600">
-                  Optimized for highest A grade probability while meeting all requirements
-                </p>
+        {isPlanGenerated && (
+          <div className="mb-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-3">
+                <Wand2 className="h-5 w-5 text-blue-500" />
+                <div>
+                  <h3 className="font-medium text-gray-900">4-Year Plan Generated</h3>
+                  <p className="text-sm text-gray-600">
+                    Optimized for highest A grade probability while meeting all requirements
+                  </p>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button className="text-sm text-gray-600 hover:text-gray-900">
+                  View Details
+                </button>
+                <button className="text-sm text-blue-500 font-medium hover:text-blue-600">
+                  Apply Plan
+                </button>
               </div>
             </div>
-            <div className="flex space-x-3">
-              <button className="text-sm text-gray-600 hover:text-gray-900">
-                View Details
-              </button>
-              <button className="text-sm text-blue-500 font-medium hover:text-blue-600">
-                Apply Plan
-              </button>
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Year Selector Pills */}
         <div className="flex space-x-2 mb-8">
@@ -170,7 +210,9 @@ export default function Home() {
                     <div key={semIndex} className="border border-gray-200 rounded-lg">
                       <div className="p-4 border-b bg-gray-50">
                         <div className="flex justify-between items-center">
-                          <h3 className="text-lg font-medium text-gray-900">{`${semester} ${2024 + yearIndex}`}</h3>
+                          <h3 className="text-lg font-medium text-gray-900">
+                            {`${semester} ${2024 + yearIndex}`}
+                          </h3>
                           <div className="flex items-center space-x-2">
                             <span className="text-sm font-medium text-gray-700">12.00 credits</span>
                             <button 

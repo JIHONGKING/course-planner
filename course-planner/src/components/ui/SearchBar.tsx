@@ -1,3 +1,4 @@
+// src/components/ui/SearchBar.tsx
 import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { useCourses } from '@/hooks/useCourses';
@@ -6,12 +7,13 @@ export default function SearchBar() {
   const [searchTerm, setSearchTerm] = useState('');
   const { searchCourses, loading } = useCourses();
 
+  // 검색어 변경 시 API 호출
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchTerm) {
         searchCourses(searchTerm);
       }
-    }, 300);
+    }, 300); // 디바운스 처리
 
     return () => clearTimeout(timer);
   }, [searchTerm, searchCourses]);
