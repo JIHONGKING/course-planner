@@ -1,5 +1,23 @@
 // src/types/course.ts
 
+export interface GradeDistribution {
+  A: string | number;
+  AB: string | number;
+  B: string | number;
+  BC: string | number;
+  C: string | number;
+  D: string | number;
+  F: string | number;
+}
+
+export interface FilterOptions {
+  level: string;
+  term: string;
+  department: string;
+  credits: string;
+  requirements: string[];  // requirements를 필수 필드로 변경
+}
+
 export interface Course {
   id: string;
   code: string;
@@ -10,22 +28,26 @@ export interface Course {
   level: string;
   prerequisites: string[];
   term: string[];
-  gradeDistribution: string;
-  createdAt: string;
-  updatedAt: string;
+  gradeDistribution: string | GradeDistribution;
 }
+
+export interface SemesterCourse extends Course {
+  semesterId: string;
+}
+
 
 export interface Semester {
   id: string;
-  term: 'Fall' | 'Spring' | 'Summer';
   year: number;
-  courses: Course[];
+  term: string;
+  courses: SemesterCourse[];
 }
+
 
 export interface AcademicYear {
   id: string;
-  startYear: number;
-  yearName: string;
+  name: string;
+  year: string;
   semesters: Semester[];
 }
 
