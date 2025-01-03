@@ -1,6 +1,6 @@
 // app/api/courses/route.ts
 import { NextResponse } from 'next/server';
-import prisma from '../../../lib/prisma';
+import prisma from '@/lib/prisma';
 import type { Course } from '@/types/course';
 import type { Prisma } from '@prisma/client';
 

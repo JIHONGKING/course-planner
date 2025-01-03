@@ -3,6 +3,8 @@ import { useCourses } from '@/hooks/useCourses';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { SortControls } from '@/components/ui/SortControls';
+import { Pagination } from '@/components/ui/Pagination';
+import type { Course, GradeDistribution } from '@/types/course';
 
 export default function CourseList() {
   const {
@@ -11,25 +13,38 @@ export default function CourseList() {
     error,
     sortBy,
     sortOrder,
-    searchCourses,
+    currentPage,
+    totalPages,
     handleSortChange,
     toggleSortOrder,
+    handlePageChange
   } = useCourses();
+
+  const getGradeA = (gradeDistribution: string | GradeDistribution): number => {
+    if (typeof gradeDistribution === 'string') {
+      try {
+        return parseFloat(JSON.parse(gradeDistribution).A);
+      } catch {
+        return 0;
+      }
+    }
+    return parseFloat(gradeDistribution.A.toString());
+  };
 
   if (loading) {
     return <LoadingState />;
   }
 
   if (error) {
-    return <ErrorMessage message={error} retry={() => searchCourses('')} />;
+    return <ErrorMessage message={error} />;
   }
 
   return (
     <div className="space-y-4">
       {courses.length > 0 && (
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center py-4">
           <p className="text-sm text-gray-500">
-            Found {courses.length} courses
+            Showing {courses.length} courses
           </p>
           <SortControls
             sortBy={sortBy}
@@ -40,11 +55,11 @@ export default function CourseList() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {courses.map((course) => (
-          <div 
+      <div className="space-y-4">
+        {courses.map((course: Course) => (
+          <div
             key={course.id}
-            className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50"
+            className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors duration-200"
           >
             <div className="flex justify-between items-start">
               <div className="flex-1">
@@ -60,15 +75,9 @@ export default function CourseList() {
                 )}
               </div>
               <div className="ml-4 text-right">
-                {typeof course.gradeDistribution === 'string' ? (
-                  <div className="text-sm text-green-600 font-medium">
-                    A: {JSON.parse(course.gradeDistribution).A}%
-                  </div>
-                ) : (
-                  <div className="text-sm text-green-600 font-medium">
-                    A: {course.gradeDistribution.A}%
-                  </div>
-                )}
+                <div className="text-sm text-green-600 font-medium">
+                  A: {getGradeA(course.gradeDistribution)}%
+                </div>
                 <div className="text-sm text-gray-500 mt-1">
                   {course.term.join(', ')}
                 </div>
@@ -77,12 +86,20 @@ export default function CourseList() {
           </div>
         ))}
 
-        {courses.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No courses found. Try adjusting your search terms.
+        {courses.length === 0 && !loading && (
+          <div className="text-center py-12 text-gray-500">
+            No courses found. Try adjusting your search or filters.
           </div>
         )}
       </div>
+
+      {courses.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+        />
+      )}
     </div>
   );
 }

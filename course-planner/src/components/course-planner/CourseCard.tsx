@@ -1,15 +1,5 @@
 import { X } from 'lucide-react';
-
-interface Course {
-  code: string;
-  name: string;
-  credits: number;
-  gradeDistribution: {
-    A: number;
-    // 다른 등급들도 추가할 수 있습니다.
-  };
-  prerequisites: string[];
-}
+import { Course, GradeDistribution } from '@/types/course';
 
 interface CourseCardProps {
   course: Course;
@@ -17,6 +7,17 @@ interface CourseCardProps {
 }
 
 export default function CourseCard({ course, onRemove }: CourseCardProps) {
+  const getGradeA = (gradeDistribution: string | GradeDistribution): number => {
+    if (typeof gradeDistribution === 'string') {
+      try {
+        return parseFloat(JSON.parse(gradeDistribution).A);
+      } catch {
+        return 0;
+      }
+    }
+    return parseFloat(gradeDistribution.A.toString());
+  };
+
   return (
     <div className="group relative border border-gray-200 rounded-md p-3 hover:bg-gray-50">
       <button
@@ -33,7 +34,7 @@ export default function CourseCard({ course, onRemove }: CourseCardProps) {
         <div className="text-right">
           <div className="text-gray-900">{course.credits.toFixed(2)} Cr</div>
           <div className="text-sm text-green-600 font-medium">
-            A: {course.gradeDistribution.A.toFixed(1)}%
+            A: {getGradeA(course.gradeDistribution)}%
           </div>
         </div>
       </div>

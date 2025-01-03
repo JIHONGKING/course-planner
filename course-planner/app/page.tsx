@@ -5,7 +5,24 @@ import React, { useState } from 'react';
 import { Wand2, ChevronDown, X, Plus, Trash2, Search } from 'lucide-react';
 import { useCourses } from '@/hooks/useCourses';
 import { usePlanner } from '@/hooks/usePlanner';
-import type { Course } from '@/types/course';
+import type { Course, GradeDistribution } from '@/types/course';
+
+function isGradeDistribution(value: any): value is GradeDistribution {
+  return value && typeof value === 'object' && 'A' in value;
+}
+
+function parseGradeDistribution(distribution: string | GradeDistribution): GradeDistribution {
+  if (typeof distribution === 'string') {
+    try {
+      const parsed = JSON.parse(distribution);
+      return parsed as GradeDistribution;
+    } catch {
+      return { A: '0', AB: '0', B: '0', BC: '0', C: '0', D: '0', F: '0' };
+    }
+  }
+  return distribution;
+}
+
 
 export default function Home() {
   const [isPlanGenerated, setIsPlanGenerated] = useState(false);
@@ -22,7 +39,8 @@ export default function Home() {
     saveCourse,
     removeSavedCourse,
     clearSemester,
-    generatePlan
+    generatePlan,
+    clearSavedCourses 
   } = usePlanner();
   
   const [preferences, setPreferences] = useState({
@@ -44,6 +62,15 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to save course:', error);
     }
+  };
+
+  const renderGradeA = (course: Course) => {
+    const gradeData = parseGradeDistribution(course.gradeDistribution);
+    return (
+      <div className="text-sm text-green-600 font-medium">
+        A: {gradeData.A}%
+      </div>
+    );
   };
 
   const handleCourseAdd = (course: Course, semesterId: string) => {
@@ -194,7 +221,7 @@ export default function Home() {
                     )}
                   </div>
                   <div className="ml-4 text-right">
-                    {typeof course.gradeDistribution === 'string' ? (
+                  {typeof course.gradeDistribution === 'string' ? (
                       <div className="text-sm text-green-600 font-medium">
                         A: {JSON.parse(course.gradeDistribution).A}%
                       </div>

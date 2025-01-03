@@ -41,6 +41,10 @@ export function usePlanner() {
     }));
   });
 
+  const clearSavedCourses = useCallback(() => {
+    setSavedCourses([]);
+  }, []);
+
   // 학기별 학점 계산
   const calculateCredits = useCallback((semesterId: string) => {
     const semester = academicPlan
@@ -148,6 +152,7 @@ export function usePlanner() {
     removeSavedCourse,
     clearSemester,
     generatePlan,
-    setSavedCourses
+    clearSavedCourses,  
+    setSavedCourses,
   };
 }

@@ -9,7 +9,7 @@ generator client {
 }
 
 model Course {
-  id               String   @id @default(cuid())
+  id               String   @id
   code             String   @unique
   name             String
   description      String
@@ -21,24 +21,23 @@ model Course {
   gradeDistribution Json
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  semesters        SemesterCourse[]
 }
 
 model AcademicYear {
-  id         String     @id @default(cuid())
-  yearName   String
-  startYear  Int
-  semesters  Semester[]
-  planId     String
-  plan       AcademicPlan @relation(fields: [planId], references: [id])
+  id        String     @id @default(cuid())
+  yearName  String
+  startYear Int
+  semesters Semester[]
+  planId    String
+  plan      AcademicPlan @relation(fields: [planId], references: [id])
 }
 
 model Semester {
-  id            String           @id @default(cuid())
-  term          String
-  year          Int
+  id             String           @id @default(cuid())
+  term           String
+  year           Int
   academicYearId String
-  academicYear   AcademicYear    @relation(fields: [academicYearId], references: [id])
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id])
   courses        SemesterCourse[]
 }
 

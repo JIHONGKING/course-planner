@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]  // './src/*'로 변경
+      "@/*": ["./src/*"],  // './src/*'로 변경
+      "@/src/*": ["./src/*"]  // 이 부분 추가
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "next.config.js"],

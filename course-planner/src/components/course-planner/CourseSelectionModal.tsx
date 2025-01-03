@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import { Search, X, Filter } from 'lucide-react';
-import type { Course } from '@/types/course';
+import type { Course, GradeDistribution } from '@/types/course';
+import { getGradeA } from '@/utils/gradeUtils';
 
 interface CourseSelectionModalProps {
   isOpen: boolean;
@@ -60,6 +61,19 @@ export default function CourseSelectionModal({
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
   };
+
+  const getGradeA = (gradeDistribution: string | GradeDistribution): string => {
+    if (typeof gradeDistribution === 'string') {
+      try {
+        const parsed = JSON.parse(gradeDistribution);
+        return parsed.A.toString();
+      } catch {
+        return '0';
+      }
+    }
+    return gradeDistribution.A.toString();
+  };
+  
 
   const isCourseInSemester = (courseId: string) => {
     return currentSemesterCourses.some(course => course.id === courseId);
@@ -158,7 +172,7 @@ export default function CourseSelectionModal({
                     <div className="text-right">
                       <div className="text-sm font-medium">{course.credits} Credits</div>
                       <div className="text-xs text-green-600">
-                        A: {JSON.parse(course.gradeDistribution).A.toFixed(1)}%
+                         A: {getGradeA(course.gradeDistribution)}%
                       </div>
                     </div>
                   </div>

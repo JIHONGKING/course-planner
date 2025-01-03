@@ -1,16 +1,12 @@
 // src/lib/madgrades.ts
 
-export const DEPARTMENT_CODES: { [key: string]: string } = {
-  '250': 'AFRICAN',
-  '448': 'SCAND ST',
-  '266': 'COMP SCI',
-  '600': 'MATH',
-  '146': 'CHEM',
-  '205': 'PHYSICS',
-  '200': 'STAT'
-  // 추가 학과 코드들은 필요에 따라 추가
-};
+import prisma from '@/lib/prisma';
+import type { Course, GradeDistribution } from '@/types/course';
+import { Prisma } from '@prisma/client';
 
+
+
+// 로컬 인터페이스는 제거하고 import된 타입만 사용
 interface MadgradesGrades {
   aCount: number;
   abCount: number;
@@ -21,6 +17,36 @@ interface MadgradesGrades {
   fCount: number;
   total: number;
 }
+
+function convertToPrismaFormat(course: Course): Prisma.CourseCreateInput {
+  return {
+    ...course,
+    id: course.id,
+    code: course.code,
+    name: course.name,
+    description: course.description,
+    credits: course.credits,
+    department: course.department,
+    level: course.level,
+    prerequisites: course.prerequisites,
+    term: course.term,
+    // Convert gradeDistribution to string for Prisma JSON field
+    gradeDistribution: typeof course.gradeDistribution === 'string' 
+      ? course.gradeDistribution 
+      : JSON.stringify(course.gradeDistribution)
+  };
+}
+
+export const DEPARTMENT_CODES: { [key: string]: string } = {
+  '250': 'AFRICAN',
+  '448': 'SCAND ST',
+  '266': 'COMP SCI',
+  '600': 'MATH',
+  '146': 'CHEM',
+  '205': 'PHYSICS',
+  '200': 'STAT'
+};
+
 
 export interface MadgradesCourse {
   uuid: string;
@@ -33,14 +59,124 @@ export interface MadgradesCourse {
   description?: string;
 }
 
-interface GradeDistribution {
-  A: string;
-  AB: string;
-  B: string;
-  BC: string;
-  C: string;
-  D: string;
-  F: string;
+interface SyncLog {
+  timestamp: Date;
+  courseId: string;
+  action: 'create' | 'update';
+  success: boolean;
+  error?: string;
+}
+
+export async function testMadgradesConnection() {
+  try {
+    const response = await fetch('https://api.madgrades.com/v1/courses?per_page=1', {
+      headers: {
+        'Authorization': `Token token=${process.env.MADGRADES_API_TOKEN}`,
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API test failed: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      message: 'Successfully connected to Madgrades API',
+      sample: data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+export async function syncCoursesWithMadgrades() {
+  const batchSize = 50;
+  let page = 1;
+  let totalSynced = 0;
+  let hasMore = true;
+  const logs: SyncLog[] = [];
+
+  try {
+    console.log('Starting course sync...');
+    
+    while (hasMore) {
+      console.log(`Processing page ${page}...`);
+      
+      const response = await fetch(
+        `https://api.madgrades.com/v1/courses?page=${page}&per_page=${batchSize}`,
+        {
+          headers: {
+            'Authorization': `Token token=${process.env.MADGRADES_API_TOKEN}`,
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch courses: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      for (const course of data.results) {
+        try {
+          const grades = await getGradeDistribution(course.uuid);
+          const appCourse = convertToAppCourse(course, grades);
+          const prismaData = convertToPrismaFormat(appCourse);
+          
+          await prisma.course.upsert({
+            where: { id: course.uuid },
+            create: prismaData,
+            update: prismaData
+          });
+
+          logs.push({
+            timestamp: new Date(),
+            courseId: course.uuid,
+            action: 'update',
+            success: true
+          });
+
+          totalSynced++;
+        } catch (error) {
+          logs.push({
+            timestamp: new Date(),
+            courseId: course.uuid,
+            action: 'update',
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+          console.error(`Failed to sync course ${course.uuid}:`, error);
+        }
+      }
+
+      hasMore = data.totalPages > page;
+      page++;
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    return { 
+      success: true, 
+      totalSynced,
+      message: `Successfully synced ${totalSynced} courses`,
+      logs: logs.slice(-100)
+    };
+
+  } catch (error) {
+    console.error('Error during course sync:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      totalSynced,
+      logs: logs.slice(-100)
+    };
+  }
 }
 
 export async function getGradeDistribution(courseUuid: string): Promise<GradeDistribution | null> {
@@ -118,8 +254,17 @@ export async function searchCourses(query: string): Promise<MadgradesCourse[]> {
   }
 }
 
-export function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null) {
+export function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null): Course {
   const deptCode = madgradesCourse.subjects[0]?.code;
+  const gradeData = grades || {
+    A: '45.2',
+    AB: '30.1',
+    B: '15.3',
+    BC: '5.2',
+    C: '2.1',
+    D: '1.1',
+    F: '1.0'
+  };
   
   return {
     id: madgradesCourse.uuid,
@@ -131,14 +276,6 @@ export function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: Gra
     level: String(Math.floor(madgradesCourse.number / 100) * 100),
     prerequisites: [],
     term: ['Fall', 'Spring'],
-    gradeDistribution: grades || {
-      A: '45.2',
-      AB: '30.1',
-      B: '15.3',
-      BC: '5.2',
-      C: '2.1',
-      D: '1.1',
-      F: '1.0'
-    }
+    gradeDistribution: JSON.stringify(gradeData)  // GradeDistribution을 문자열로 변환
   };
 }

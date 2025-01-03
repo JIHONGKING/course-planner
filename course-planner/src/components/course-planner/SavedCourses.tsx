@@ -1,5 +1,6 @@
+// src/components/course-planner/SavedCourses.tsx
 import { Trash2, X } from 'lucide-react';
-import type { Course } from '@/src/types/course';
+import type { Course, GradeDistribution } from '@/types/course';
 
 interface SavedCoursesProps {
   courses: Course[];
@@ -14,12 +15,23 @@ export default function SavedCourses({
   onClearAll,
   onAddToPlan
 }: SavedCoursesProps) {
+  const getGradeA = (gradeDistribution: string | GradeDistribution): number => {
+    if (typeof gradeDistribution === 'string') {
+      try {
+        return parseFloat(JSON.parse(gradeDistribution).A);
+      } catch {
+        return 0;
+      }
+    }
+    return parseFloat(gradeDistribution.A.toString());
+  };
+
   return (
     <div className="mt-8 border-t border-gray-200 pt-8">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-medium text-gray-900">Saved for later</h2>
         <div className="flex items-center space-x-4">
-          <button 
+          <button
             onClick={onClearAll}
             className="text-sm text-red-500 hover:text-red-600 flex items-center space-x-1"
           >
@@ -33,12 +45,11 @@ export default function SavedCourses({
           </select>
         </div>
       </div>
-
       <div className="border border-gray-200 rounded-lg p-4 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {courses.map(course => (
             <div key={course.id} className="group border border-gray-200 rounded-md p-3 hover:bg-gray-50 relative">
-              <button 
+              <button
                 onClick={() => onRemove(course.id)}
                 className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
               >
@@ -51,9 +62,9 @@ export default function SavedCourses({
                 </div>
                 <div className="flex items-center space-x-3">
                   <span className="text-sm text-green-600 font-medium">
-                    A: {course.gradeDistribution.A.toFixed(1)}%
+                    A: {getGradeA(course.gradeDistribution)}%
                   </span>
-                  <button 
+                  <button
                     onClick={() => onAddToPlan(course)}
                     className="text-blue-500 hover:text-blue-600 font-medium text-sm"
                   >
@@ -65,7 +76,7 @@ export default function SavedCourses({
           ))}
           {courses.length === 0 && (
             <div className="col-span-2 text-center py-8 text-gray-500">
-              No saved courses yet. Save courses to plan your schedule later.
+              No saved courses yet
             </div>
           )}
         </div>

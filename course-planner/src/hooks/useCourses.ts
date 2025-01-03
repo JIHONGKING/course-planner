@@ -1,103 +1,106 @@
-// src/hooks/useCourses.ts
 import { useState, useCallback } from 'react';
-import type { Course, FilterOptions } from '@/types/course';
+import type { Course } from '@/types/course';
+import { sortCourses, type SortOption, type SortOrder } from '@/utils/sortUtils';
 
-type SortOrder = 'asc' | 'desc';
+export interface FilterOptions {
+  department: string;
+  level: string;
+  credits: string;
+  term: string;
+}
 
 export function useCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<string>('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [sortBy, setSortBy] = useState<SortOption>('grade');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [filters, setFilters] = useState<FilterOptions>({
+    department: '',
+    level: '',
+    credits: '',
+    term: ''
+  });
 
-  const getGradeA = (gradeDistribution: Course['gradeDistribution']) => {
-    if (typeof gradeDistribution === 'string') {
-      return parseFloat(JSON.parse(gradeDistribution).A.toString());
-    }
-    return parseFloat(gradeDistribution.A.toString());
-  };
-
-  const sortCourses = useCallback((coursesToSort: Course[]) => {
-    if (!sortBy) return coursesToSort;
-
-    return [...coursesToSort].sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortBy) {
-        case 'grade':
-          const aGrade = getGradeA(a.gradeDistribution);
-          const bGrade = getGradeA(b.gradeDistribution);
-          comparison = aGrade - bGrade;
-          break;
-
-        case 'credits':
-          comparison = a.credits - b.credits;
-          break;
-
-        case 'code':
-          comparison = a.code.localeCompare(b.code);
-          break;
-
-        case 'level':
-          comparison = parseInt(a.level) - parseInt(b.level);
-          break;
-
-        default:
-          return 0;
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-  }, [sortBy, sortOrder]);
-
-  const searchCourses = useCallback(async (query: string, filters?: FilterOptions) => {
-    if (!query.trim() && !filters) {
+  const searchCourses = useCallback(async (searchTerm: string) => {
+    if (!searchTerm.trim()) {
       setCourses([]);
       return;
     }
 
     setLoading(true);
     setError(null);
-
+    
     try {
-      const params = new URLSearchParams();
-      if (query) params.append('query', query);
-      if (filters) {
-        Object.entries(filters).forEach(([key, value]) => {
-          if (value) {
-            if (Array.isArray(value)) {
-              value.forEach(v => params.append(key, v));
-            } else {
-              params.append(key, value);
-            }
-          }
-        });
+      // Build query parameters
+      const params = new URLSearchParams({
+        query: searchTerm.trim(),
+        page: String(currentPage),
+        sortBy,
+        order: sortOrder
+      });
+
+      // Add filters to params if they exist
+      if (filters.department) params.append('department', filters.department);
+      if (filters.level) params.append('level', filters.level);
+      if (filters.credits) params.append('credits', filters.credits);
+      if (filters.term) params.append('term', filters.term);
+
+      const response = await fetch(`/api/courses/search?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch courses');
       }
 
-      const response = await fetch(`/api/courses?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch courses');
-      
       const data = await response.json();
-      const sortedCourses = sortCourses(data.courses);
-      setCourses(sortedCourses);
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setCourses(sortCourses(data.courses, sortBy, sortOrder));
+      setTotalPages(data.totalPages);
+      setCurrentPage(data.page);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load courses');
+      setError(err instanceof Error ? err.message : 'Failed to search courses');
       setCourses([]);
     } finally {
       setLoading(false);
     }
-  }, [sortCourses]);
+  }, [currentPage, sortBy, sortOrder, filters]);
 
-  const handleSortChange = useCallback((value: string) => {
-    setSortBy(value);
-    setCourses(prev => sortCourses(prev));
-  }, [sortCourses]);
+  const handleSortChange = useCallback((newSortBy: SortOption) => {
+    setSortBy(newSortBy);
+    setCourses(prev => sortCourses(prev, newSortBy, sortOrder));
+  }, [sortOrder]);
 
   const toggleSortOrder = useCallback(() => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    setCourses(prev => sortCourses(prev));
-  }, [sortCourses]);
+    setSortOrder(prev => {
+      const newOrder = prev === 'asc' ? 'desc' : 'asc';
+      setCourses(prev => sortCourses(prev, sortBy, newOrder));
+      return newOrder;
+    });
+  }, [sortBy]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: FilterOptions) => {
+    setFilters(newFilters);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters({
+      department: '',
+      level: '',
+      credits: '',
+      term: ''
+    });
+    setCurrentPage(1);
+  }, []);
 
   return {
     courses,
@@ -105,8 +108,14 @@ export function useCourses() {
     error,
     sortBy,
     sortOrder,
+    currentPage,
+    totalPages,
+    filters,
     searchCourses,
     handleSortChange,
     toggleSortOrder,
+    handlePageChange,
+    handleFilterChange,
+    clearFilters
   };
 }

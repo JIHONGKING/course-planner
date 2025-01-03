@@ -1,12 +1,12 @@
 // prisma/seed.ts
 const { PrismaClient } = require('@prisma/client');
+
 const prisma = new PrismaClient();
 
 async function main() {
   // 기존 데이터 삭제
   await prisma.course.deleteMany();
 
-  // 과목 데이터 생성
   const courses = [
     {
       code: 'COMP SCI 300',
@@ -47,22 +47,22 @@ async function main() {
       }
     },
     {
-      code: 'COMP SCI 540',
-      name: 'Introduction to Artificial Intelligence',
-      description: 'Basic concepts and algorithms of artificial intelligence',
+      code: 'COMP SCI 252',
+      name: 'Introduction to Computer Engineering',
+      description: 'Digital system fundamentals and hardware design',
       credits: 3.0,
       department: 'COMP SCI',
-      level: '500',
-      prerequisites: ['COMP SCI 400'],
+      level: '200',
+      prerequisites: [],
       term: ['Fall', 'Spring'],
       gradeDistribution: {
-        A: 42.1,
-        AB: 31.2,
-        B: 16.4,
-        BC: 5.8,
-        C: 2.9,
-        D: 1.0,
-        F: 0.6
+        A: 42.0,
+        AB: 28.0,
+        B: 18.0,
+        BC: 7.0,
+        C: 3.0,
+        D: 1.5,
+        F: 0.5
       }
     },
     {
@@ -95,12 +95,12 @@ async function main() {
     });
   }
 
-  console.log('Seed data inserted successfully');
+  console.log('Sample courses have been seeded successfully');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('Error seeding data:', e);
     process.exit(1);
   })
   .finally(async () => {

@@ -1,3 +1,4 @@
+-- prisma/migrations/20241231044438_init/migration.sql
 -- CreateTable
 CREATE TABLE "Course" (
     "id" TEXT NOT NULL,
