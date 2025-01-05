@@ -27,11 +27,23 @@ export interface Course {
   credits: number;
   department: string;
   level: string;
-  prerequisites: string[];
+  prerequisites: Prerequisite[];  // string[] 에서 Prerequisite[] 로 변경
   term: string[];
-  gradeDistribution: string | GradeDistribution;  // Allow both string and object
+  gradeDistribution: string | GradeDistribution;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface Prerequisite {
+  courseId: string;       // 선수과목 ID
+  type: 'required' | 'concurrent' | 'recommended';  // 필수, 동시수강가능, 권장
+  grade?: string;         // 최소 학점 요구사항 (e.g., "C" 이상)
+}
+
+export interface PrerequisiteValidation {
+  isValid: boolean;
+  missingPrerequisites: Prerequisite[];
+  message: string;
 }
 
 export interface SemesterCourse extends Course {

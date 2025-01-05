@@ -1,106 +1,136 @@
 // prisma/seed.ts
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  // 기존 데이터 삭제
-  await prisma.course.deleteMany();
+interface CourseInput {
+  code: string;
+  name: string;
+  description: string;
+  credits: number;
+  department: string;
+  level: string;
+  prerequisites: string[];
+  term: string[];
+  gradeDistribution: {
+    A: number;
+    AB: number;
+    B: number;
+    BC: number;
+    C: number;
+    D: number;
+    F: number;
+  };
+}
 
-  const courses = [
-    {
-      code: 'COMP SCI 300',
-      name: 'Programming II',
-      description: 'Introduction to Object-Oriented Programming',
-      credits: 3.0,
-      department: 'COMP SCI',
-      level: '300',
-      prerequisites: [],
-      term: ['Fall', 'Spring'],
-      gradeDistribution: {
-        A: 45.2,
-        AB: 30.1,
-        B: 15.3,
-        BC: 5.2,
-        C: 2.1,
-        D: 1.1,
-        F: 1.0
-      }
-    },
-    {
-      code: 'COMP SCI 400',
-      name: 'Programming III',
-      description: 'Advanced Programming and Data Structures',
-      credits: 3.0,
-      department: 'COMP SCI',
-      level: '400',
-      prerequisites: ['COMP SCI 300'],
-      term: ['Fall', 'Spring'],
-      gradeDistribution: {
-        A: 38.5,
-        AB: 28.3,
-        B: 20.1,
-        BC: 7.2,
-        C: 3.8,
-        D: 1.2,
-        F: 0.9
-      }
-    },
-    {
-      code: 'COMP SCI 252',
-      name: 'Introduction to Computer Engineering',
-      description: 'Digital system fundamentals and hardware design',
-      credits: 3.0,
-      department: 'COMP SCI',
-      level: '200',
-      prerequisites: [],
-      term: ['Fall', 'Spring'],
-      gradeDistribution: {
-        A: 42.0,
-        AB: 28.0,
-        B: 18.0,
-        BC: 7.0,
-        C: 3.0,
-        D: 1.5,
-        F: 0.5
-      }
-    },
-    {
-      code: 'MATH 221',
-      name: 'Calculus and Analytic Geometry 1',
-      description: 'Functions, limits, continuity, differentiation, integration',
-      credits: 5.0,
-      department: 'MATH',
-      level: '200',
-      prerequisites: [],
-      term: ['Fall', 'Spring'],
-      gradeDistribution: {
-        A: 32.5,
-        AB: 27.3,
-        B: 23.1,
-        BC: 9.2,
-        C: 5.8,
-        D: 1.2,
-        F: 0.9
-      }
+const courses: CourseInput[] = [
+  {
+    code: 'COMP SCI 300',
+    name: 'Programming II',
+    description: 'Introduction to Object-Oriented Programming',
+    credits: 3.0,
+    department: 'COMP SCI',
+    level: '300',
+    prerequisites: [],
+    term: ['Fall', 'Spring'],
+    gradeDistribution: {
+      A: 45.2,
+      AB: 30.1,
+      B: 15.3,
+      BC: 5.2,
+      C: 2.1,
+      D: 1.1,
+      F: 1.0
     }
-  ];
+  },
+  {
+    code: 'COMP SCI 400',
+    name: 'Programming III',
+    description: 'Advanced Programming and Data Structures',
+    credits: 3.0,
+    department: 'COMP SCI',
+    level: '400',
+    prerequisites: ['COMP SCI 300'],
+    term: ['Fall', 'Spring'],
+    gradeDistribution: {
+      A: 38.5,
+      AB: 28.3,
+      B: 20.1,
+      BC: 7.2,
+      C: 3.8,
+      D: 1.2,
+      F: 0.9
+    }
+  },
+  {
+    code: 'COMP SCI 252',
+    name: 'Introduction to Computer Engineering',
+    description: 'Digital system fundamentals and hardware design',
+    credits: 3.0,
+    department: 'COMP SCI',
+    level: '200',
+    prerequisites: [],
+    term: ['Fall', 'Spring'],
+    gradeDistribution: {
+      A: 42.0,
+      AB: 28.0,
+      B: 18.0,
+      BC: 7.0,
+      C: 3.0,
+      D: 1.5,
+      F: 0.5
+    }
+  },
+  {
+    code: 'MATH 221',
+    name: 'Calculus and Analytic Geometry 1',
+    description: 'Functions, limits, continuity, differentiation, integration',
+    credits: 5.0,
+    department: 'MATH',
+    level: '200',
+    prerequisites: [],
+    term: ['Fall', 'Spring'],
+    gradeDistribution: {
+      A: 32.5,
+      AB: 27.3,
+      B: 23.1,
+      BC: 9.2,
+      C: 5.8,
+      D: 1.2,
+      F: 0.9
+    }
+  }
+];
 
-  for (const course of courses) {
-    await prisma.course.create({
-      data: {
+async function main() {
+  try {
+    // 기존 데이터 삭제
+    await prisma.course.deleteMany();
+    console.log('Cleared existing courses');
+
+    // 새로운 데이터 생성
+    for (const course of courses) {
+      const data: Prisma.CourseCreateInput = {
+        id: `seed-${course.code.replace(/\s+/g, '-')}`,
         ...course,
         gradeDistribution: JSON.stringify(course.gradeDistribution)
-      }
-    });
-  }
+      };
 
-  console.log('Sample courses have been seeded successfully');
+      await prisma.course.create({ data });
+      console.log(`Created course: ${course.code}`);
+    }
+
+    console.log('\nSample courses have been seeded successfully');
+  } catch (error) {
+    console.error('Error seeding data:', error);
+    throw error;
+  }
 }
 
 main()
-  .catch((e) => {
-    console.error('Error seeding data:', e);
+  .catch((error) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {

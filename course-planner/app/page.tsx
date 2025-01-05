@@ -1,11 +1,12 @@
-// app/page.tsx
 'use client';
 
 import React, { useState } from 'react';
-import { Wand2, ChevronDown, X, Plus, Trash2, Search } from 'lucide-react';
+import { Wand2, ChevronDown, X, Plus, Trash2, Search, Info } from 'lucide-react';
 import { useCourses } from '@/hooks/useCourses';
 import { usePlanner } from '@/hooks/usePlanner';
+import { usePrerequisiteValidation } from '@/hooks/usePrerequisiteValidation';
 import type { Course, GradeDistribution } from '@/types/course';
+import CourseCard from '@/components/course/CourseCard';
 
 function isGradeDistribution(value: any): value is GradeDistribution {
   return value && typeof value === 'object' && 'A' in value;
@@ -22,7 +23,6 @@ function parseGradeDistribution(distribution: string | GradeDistribution): Grade
   }
   return distribution;
 }
-
 
 export default function Home() {
   const [isPlanGenerated, setIsPlanGenerated] = useState(false);
@@ -42,6 +42,12 @@ export default function Home() {
     generatePlan,
     clearSavedCourses 
   } = usePlanner();
+
+  const {
+    validationError,
+    validateCourseSelection,
+    clearValidationError
+  } = usePrerequisiteValidation();
   
   const [preferences, setPreferences] = useState({
     school: '',
@@ -51,6 +57,10 @@ export default function Home() {
     planningStrategy: 'grades' as 'grades' | 'workload' | 'balanced'
   });
 
+  // 임시 상태들 (나중에 전역 상태 관리로 이동 예정)
+  const [completedCourses, setCompletedCourses] = useState<Course[]>([]);
+  const [currentTermCourses, setCurrentTermCourses] = useState<Course[]>([]);
+
   const handleSearch = async (query: string) => {
     if (!query.trim()) return;
     await searchCourses(query);
@@ -58,7 +68,18 @@ export default function Home() {
 
   const handleCourseClick = (course: Course) => {
     try {
-      saveCourse(course);
+      // 선수과목 검증 추가
+      const isValid = validateCourseSelection(
+        course,
+        completedCourses,
+        currentTermCourses,
+        'Fall' // 현재는 하드코딩, 나중에 동적으로 변경
+      );
+
+      if (isValid) {
+        saveCourse(course);
+        clearValidationError();
+      }
     } catch (error) {
       console.error('Failed to save course:', error);
     }
@@ -75,8 +96,20 @@ export default function Home() {
 
   const handleCourseAdd = (course: Course, semesterId: string) => {
     try {
-      addCourse(course, semesterId);
-      removeSavedCourse(course.id);
+      // 선수과목 검증 추가
+      const [year, term] = semesterId.split('-');
+      const isValid = validateCourseSelection(
+        course,
+        completedCourses,
+        currentTermCourses,
+        term
+      );
+
+      if (isValid) {
+        addCourse(course, semesterId);
+        removeSavedCourse(course.id);
+        clearValidationError();
+      }
     } catch (error) {
       console.error('Failed to add course:', error);
     }
@@ -92,7 +125,6 @@ export default function Home() {
     generatePlan(planPreferences);
     setIsPlanGenerated(true);
   };
-
   return (
     <div className="min-h-screen bg-white">
       <div className="bg-white border-b border-gray-200 py-4">
@@ -126,6 +158,7 @@ export default function Home() {
               </select>
             </div>
 
+            {/* Academic Status Section */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Academic Status</label>
               <div className="flex space-x-4">
@@ -174,6 +207,17 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          {/* Validation Error Display */}
+          {validationError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start">
+                <Info className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
+                <p className="text-red-600">{validationError}</p>
+              </div>
+            </div>
+          )}
+
           {/* Search and Course List */}
           <div className="relative mb-4">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -202,45 +246,18 @@ export default function Home() {
             )}
 
             {courses.map((course) => (
-              <div 
+              <CourseCard
                 key={course.id}
-                className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                course={course}
                 onClick={() => handleCourseClick(course)}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium text-gray-900">{course.code}</h3>
-                      <span className="px-2 py-0.5 text-sm bg-gray-100 rounded-full text-gray-600">
-                        {course.credits} credits
-                      </span>
-                    </div>
-                    <p className="mt-1 text-gray-600">{course.name}</p>
-                    {course.description && (
-                      <p className="mt-1 text-sm text-gray-500">{course.description}</p>
-                    )}
-                  </div>
-                  <div className="ml-4 text-right">
-                  {typeof course.gradeDistribution === 'string' ? (
-                      <div className="text-sm text-green-600 font-medium">
-                        A: {JSON.parse(course.gradeDistribution).A}%
-                      </div>
-                    ) : (
-                      <div className="text-sm text-green-600 font-medium">
-                        A: {course.gradeDistribution.A}%
-                      </div>
-                    )}
-                    <div className="text-sm text-gray-500 mt-1">
-                      {course.term.join(', ')}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                showPrerequisites={true}
+              />
             ))}
           </div>
         </div>
       </div>
 
+      {/* Main Content Area */}
       <main className="container mx-auto px-6 py-8">
         {/* Auto Fill Preview Banner */}
         {isPlanGenerated && (
@@ -263,7 +280,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Year Selection */}
+        {/* Year Navigation */}
         <div className="flex space-x-2 mb-8">
           {academicPlan.map((year) => (
             <button
@@ -280,7 +297,7 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Academic Years */}
+        {/* Academic Plan Display */}
         <div className="space-y-8">
           {academicPlan.map((year) => (
             <div key={year.id} className="border border-gray-200 rounded-lg shadow-sm">
@@ -322,28 +339,13 @@ export default function Home() {
                       </div>
                       <div className="p-4 space-y-2">
                         {semester.courses.map((course) => (
-                          <div key={course.id} className="group border border-gray-200 rounded-md p-3 hover:bg-gray-50 transition-colors relative">
-                            <button 
-                              onClick={() => removeCourse(course.id, semester.id)}
-                              className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                            <div className="flex justify-between pr-6">
-                              <div>
-                                <h3 className="font-medium text-gray-900">{course.code}</h3>
-                                <p className="text-sm text-gray-500">{course.name}</p>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-gray-900">{course.credits} Cr</div>
-                                <div className="text-sm text-green-600 font-medium">
-                                  A: {typeof course.gradeDistribution === 'string' 
-                                    ? JSON.parse(course.gradeDistribution).A 
-                                    : course.gradeDistribution.A}%
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                          <CourseCard
+                            key={course.id}
+                            course={course}
+                            showPrerequisites={false}
+                            onRemove={() => removeCourse(course.id, semester.id)}
+                            onClick={() => {}} // 빈 onClick 핸들러 추가
+                          />
                         ))}
                         {semester.courses.length < 6 && (
                           <div className="flex justify-center items-center min-h-[60px]">
@@ -365,7 +367,7 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Saved Courses */}
+        {/* Saved Courses Section */}
         <div className="mt-8 border-t border-gray-200 pt-8">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-medium text-gray-900">Saved for later</h2>
@@ -388,33 +390,13 @@ export default function Home() {
           <div className="border border-gray-200 rounded-lg p-4 shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {savedCourses.map((course) => (
-                <div key={course.id} className="group border border-gray-200 rounded-md p-3 hover:bg-gray-50 transition-colors relative">
-                  <button 
-                    onClick={() => removeSavedCourse(course.id)}
-                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <div className="flex justify-between items-center pr-6">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{course.code}</h3>
-                      <p className="text-sm text-gray-500">{course.name}</p>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-sm text-green-600 font-medium">
-                        A: {typeof course.gradeDistribution === 'string' 
-                          ? JSON.parse(course.gradeDistribution).A 
-                          : course.gradeDistribution.A}%
-                      </span>
-                      <button 
-                        onClick={() => handleCourseAdd(course, `${selectedYear}-${course.term[0]}`)}
-                        className="text-blue-500 hover:text-blue-600 font-medium text-sm"
-                      >
-                        Add to Schedule
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  showPrerequisites={true}
+                  onRemove={() => removeSavedCourse(course.id)}
+                  onClick={() => handleCourseAdd(course, `${selectedYear}-${course.term[0]}`)}
+                />
               ))}
               {savedCourses.length === 0 && (
                 <div className="col-span-2 text-center py-8 text-gray-500">
@@ -427,4 +409,4 @@ export default function Home() {
       </main>
     </div>
   );
-}
+  }

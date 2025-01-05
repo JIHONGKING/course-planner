@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "sync": "ts-node -P tsconfig.json scripts/sync-courses.ts",
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {

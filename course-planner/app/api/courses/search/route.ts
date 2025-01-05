@@ -6,6 +6,7 @@ import type { SortOption, SortOrder } from '@/utils/sortUtils';
 import type { Course } from '@/types/course';
 import type { Prisma } from '@prisma/client';
 
+
 function convertPrismaCourseToCourse(prismaData: any): Course {
   return {
     ...prismaData,

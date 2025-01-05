@@ -21,6 +21,11 @@ model Course {
   gradeDistribution Json
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  // 선수과목 관계 추가
+  semesterCourses  SemesterCourse[]
+  prerequisiteFor  CoursePrerequisite[] @relation("Prerequisites")
+  requiredFor      CoursePrerequisite[] @relation("RequiredFor")
 }
 
 model AcademicYear {
@@ -56,4 +61,18 @@ model AcademicPlan {
   savedCourses Json
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+}
+
+model CoursePrerequisite {
+  id            String   @id @default(cuid())
+  courseId      String   // The course that has prerequisites
+  course        Course   @relation("Prerequisites", fields: [courseId], references: [id])
+  prerequisiteId String  // The course that is required
+  prerequisite   Course  @relation("RequiredFor", fields: [prerequisiteId], references: [id])
+  type          String   // required, concurrent, recommended
+  minGrade      String?  // Minimum grade requirement (optional)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([courseId, prerequisiteId])
 }
