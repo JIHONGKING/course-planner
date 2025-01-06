@@ -6,7 +6,11 @@ import { useCourses } from '@/hooks/useCourses';
 import { usePlanner } from '@/hooks/usePlanner';
 import { usePrerequisiteValidation } from '@/hooks/usePrerequisiteValidation';
 import type { Course, GradeDistribution } from '@/types/course';
-import CourseCard from '@/components/course/CourseCard';
+import type { SortOption, SortOrder } from '@/utils/sortUtils';
+import CourseCard from '@/components/common/CourseCard';
+import Semester from '@/components/course-planner/Semester';
+import SavedCourses from '@/components/course-planner/SavedCourses';
+import AcademicYear from '@/components/course-planner/AcademicYear';
 
 function isGradeDistribution(value: any): value is GradeDistribution {
   return value && typeof value === 'object' && 'A' in value;
@@ -26,6 +30,8 @@ function parseGradeDistribution(distribution: string | GradeDistribution): Grade
 
 export default function Home() {
   const [isPlanGenerated, setIsPlanGenerated] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('grade');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const { courses, loading, error, searchCourses } = useCourses();
   const {
     savedCourses,
@@ -68,12 +74,11 @@ export default function Home() {
 
   const handleCourseClick = (course: Course) => {
     try {
-      // 선수과목 검증 추가
       const isValid = validateCourseSelection(
         course,
         completedCourses,
         currentTermCourses,
-        'Fall' // 현재는 하드코딩, 나중에 동적으로 변경
+        'Fall'
       );
 
       if (isValid) {
@@ -85,18 +90,8 @@ export default function Home() {
     }
   };
 
-  const renderGradeA = (course: Course) => {
-    const gradeData = parseGradeDistribution(course.gradeDistribution);
-    return (
-      <div className="text-sm text-green-600 font-medium">
-        A: {gradeData.A}%
-      </div>
-    );
-  };
-
   const handleCourseAdd = (course: Course, semesterId: string) => {
     try {
-      // 선수과목 검증 추가
       const [year, term] = semesterId.split('-');
       const isValid = validateCourseSelection(
         course,
@@ -125,6 +120,16 @@ export default function Home() {
     generatePlan(planPreferences);
     setIsPlanGenerated(true);
   };
+
+  const handleSortChange = (newSortBy: SortOption) => {
+    if (newSortBy === sortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(newSortBy);
+      setSortOrder('desc');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <div className="bg-white border-b border-gray-200 py-4">
@@ -297,116 +302,33 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Academic Plan Display */}
-        <div className="space-y-8">
-          {academicPlan.map((year) => (
-            <div key={year.id} className="border border-gray-200 rounded-lg shadow-sm">
-              <div className="p-4 bg-gray-50 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold text-gray-900">{year.year}</h2>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-600">
-                      Total Credits: {calculateYearCredits(year.id)}/30
-                    </span>
-                    <button className="text-gray-400 hover:text-gray-600">
-                      <ChevronDown className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-4">
-                <div className="grid md:grid-cols-3 gap-6">
-                  {year.semesters.map((semester) => (
-                    <div key={semester.id} className="border border-gray-200 rounded-lg">
-                      <div className="p-4 border-b bg-gray-50">
-                        <div className="flex justify-between items-center">
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {`${semester.term} ${semester.year}`}
-                          </h3>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-medium text-gray-700">
-                              {calculateCredits(semester.id)} credits
-                            </span>
-                            <button 
-                              onClick={() => clearSemester(semester.id)}
-                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4 space-y-2">
-                        {semester.courses.map((course) => (
-                          <CourseCard
-                            key={course.id}
-                            course={course}
-                            showPrerequisites={false}
-                            onRemove={() => removeCourse(course.id, semester.id)}
-                            onClick={() => {}} // 빈 onClick 핸들러 추가
-                          />
-                        ))}
-                        {semester.courses.length < 6 && (
-                          <div className="flex justify-center items-center min-h-[60px]">
-                            <button 
-                              className="flex items-center space-x-1 text-gray-400 hover:text-gray-600"
-                              onClick={() => setSelectedYear(year.name)}
-                            >
-                              <Plus className="h-4 w-4" />
-                              <span>Add Course</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+{/* Academic Plan Display */}
+<div className="space-y-8">
+  {academicPlan.map((academicYear) => (
+    <AcademicYear
+      key={academicYear.id}
+      year={academicYear}  // academicYear는 이미 필요한 모든 필드를 포함
+      onRemoveCourse={removeCourse}
+      onAddCourse={(semesterId, course) => {
+        addCourse(course, semesterId);
+        removeSavedCourse(course.id);
+      }}
+      onClearSemester={clearSemester}
+    />
+  ))}
+</div>
 
         {/* Saved Courses Section */}
-        <div className="mt-8 border-t border-gray-200 pt-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Saved for later</h2>
-            <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => clearSavedCourses()}
-                className="text-sm text-red-500 hover:text-red-600 flex items-center space-x-1"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Clear All</span>
-              </button>
-              <select className="text-sm border border-gray-300 rounded-md px-2 py-1">
-                <option>Highest A %</option>
-                <option>Required First</option>
-                <option>Credits</option>
-              </select>
-            </div>
-          </div>
-          
-          <div className="border border-gray-200 rounded-lg p-4 shadow-sm">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {savedCourses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  showPrerequisites={true}
-                  onRemove={() => removeSavedCourse(course.id)}
-                  onClick={() => handleCourseAdd(course, `${selectedYear}-${course.term[0]}`)}
-                />
-              ))}
-              {savedCourses.length === 0 && (
-                <div className="col-span-2 text-center py-8 text-gray-500">
-                  No saved courses yet
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <SavedCourses
+          courses={savedCourses}
+          onRemove={removeSavedCourse}
+          onClearAll={clearSavedCourses}
+          onAddToPlan={(course) => handleCourseAdd(course, `${selectedYear}-${course.term[0]}`)}
+          onSort={handleSortChange}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+        />
       </main>
     </div>
   );
-  }
+}

@@ -15,8 +15,7 @@ export interface FilterOptions {
   term: string;
   department: string;
   credits: string;
-  requirements: string[];  // requirements를 필수 필드로 변경
-  page?: number; // 추가된 page 옵션
+  requirements: string[];
 }
 
 export interface Course {
@@ -27,7 +26,7 @@ export interface Course {
   credits: number;
   department: string;
   level: string;
-  prerequisites: Prerequisite[];  // string[] 에서 Prerequisite[] 로 변경
+  prerequisites: Prerequisite[];
   term: string[];
   gradeDistribution: string | GradeDistribution;
   createdAt?: string;
@@ -35,9 +34,9 @@ export interface Course {
 }
 
 export interface Prerequisite {
-  courseId: string;       // 선수과목 ID
-  type: 'required' | 'concurrent' | 'recommended';  // 필수, 동시수강가능, 권장
-  grade?: string;         // 최소 학점 요구사항 (e.g., "C" 이상)
+  courseId: string;
+  type: 'required' | 'concurrent' | 'recommended';
+  grade?: string;
 }
 
 export interface PrerequisiteValidation {
@@ -55,17 +54,18 @@ export interface Semester {
   id: string;
   year: number;
   term: string;
-  courses: SemesterCourse[];
+  courses: Course[];
+  academicYearId: string;
 }
 
 
 export interface AcademicYear {
   id: string;
-  name: string;
-  year: string;
+  name: string;      // Freshman, Sophomore, etc.
+  yearName: string;  // Display name
+  year: string;      // e.g., "2023-2024"
+  startYear: number; // e.g., 2023
   semesters: Semester[];
-  yearName: string;  // 필드 추가
-  startYear: number; 
 }
 
 export interface AcademicPlan {
@@ -73,6 +73,12 @@ export interface AcademicPlan {
   userId: string;
   years: AcademicYear[];
   savedCourses: Course[];
+}
+
+export interface PlanningPreferences {
+  prioritizeGrades: boolean;
+  balanceWorkload: boolean;
+  includeRequirements: boolean;
 }
 
 export type ClassStanding = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';

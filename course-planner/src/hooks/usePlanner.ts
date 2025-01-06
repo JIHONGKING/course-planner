@@ -2,6 +2,17 @@
 import { useState, useCallback } from 'react';
 import type { Course } from '@/types/course';
 
+function parseYear(yearString: string): number {
+  const currentYear = new Date().getFullYear();
+  switch (yearString) {
+    case 'Freshman': return currentYear;
+    case 'Sophomore': return currentYear + 1;
+    case 'Junior': return currentYear + 2;
+    case 'Senior': return currentYear + 3;
+    default: return currentYear;
+  }
+}
+
 interface SemesterCourse extends Course {
   semesterId: string;
 }
@@ -11,31 +22,34 @@ interface Semester {
   year: number;
   term: string;
   courses: SemesterCourse[];
+  academicYearId: string;
 }
 
 interface AcademicYear {
   id: string;
   name: string;
+  yearName: string;
   year: string;
+  startYear: number;
   semesters: Semester[];
 }
 
 export function usePlanner() {
-  // 저장된 코스 목록
   const [savedCourses, setSavedCourses] = useState<Course[]>([]);
-  // 현재 선택된 학년
   const [selectedYear, setSelectedYear] = useState<string>('Freshman');
-  // 학업 계획 데이터
   const [academicPlan, setAcademicPlan] = useState<AcademicYear[]>(() => {
     const startYear = new Date().getFullYear();
-    return ['Freshman', 'Sophomore', 'Junior', 'Senior'].map((year, index) => ({
+    return ['Freshman', 'Sophomore', 'Junior', 'Senior'].map((yearName, index) => ({
       id: `year-${index}`,
-      name: year,
-      year: `${year} Year (${startYear + index}-${startYear + index + 1})`,
-      semesters: ['Fall', 'Spring', 'Summer'].map((term) => ({
-        id: `${year.toLowerCase()}-${term.toLowerCase()}`,
+      name: yearName,
+      yearName: yearName,
+      year: `${startYear + index}-${startYear + index + 1}`,
+      startYear: startYear + index,
+      semesters: ['Fall', 'Spring', 'Summer'].map((term): Semester => ({
+        id: `${yearName.toLowerCase()}-${term.toLowerCase()}`,
         year: startYear + index,
         term,
+        academicYearId: `year-${index}`,
         courses: []
       }))
     }));
@@ -55,12 +69,59 @@ export function usePlanner() {
     return semester.courses.reduce((sum, course) => sum + course.credits, 0);
   }, [academicPlan]);
 
+  // usePlanner.ts에 새로운 함수 추가
+  
+  const moveCourse = useCallback((
+    courseId: string, 
+    fromSemesterId: string, 
+    toSemesterId: string
+  ) => {
+    setAcademicPlan(prev => {
+      // 이동할 과목 찾기
+      const course = prev
+        .flatMap(year => year.semesters)
+        .find(sem => sem.id === fromSemesterId)
+        ?.courses.find(course => course.id === courseId);
+
+      if (!course) return prev;
+
+      // 동일한 과목이 이미 대상 학기에 있는지 확인
+      const targetSemester = prev
+        .flatMap(year => year.semesters)
+        .find(sem => sem.id === toSemesterId);
+
+      if (targetSemester?.courses.some(c => c.id === courseId)) {
+        return prev;
+      }
+
+      // 과목 이동
+      return prev.map(year => ({
+        ...year,
+        semesters: year.semesters.map(semester => {
+          if (semester.id === fromSemesterId) {
+            return {
+              ...semester,
+              courses: semester.courses.filter(c => c.id !== courseId)
+            };
+          }
+          if (semester.id === toSemesterId) {
+            return {
+              ...semester,
+              courses: [...semester.courses, { ...course, semesterId: toSemesterId }]
+            };
+          }
+          return semester;
+        })
+      }));
+    });
+  }, []);
+  
   // 연도별 총 학점 계산
   const calculateYearCredits = useCallback((yearId: string) => {
     const year = academicPlan.find(y => y.id === yearId);
     if (!year) return 0;
     return year.semesters.reduce((sum, semester) => 
-      sum + semester.courses.reduce((semSum, course) => semSum + course.credits, 0), 0);
+      sum + semester.courses.reduce((total, course) => total + course.credits, 0), 0);
   }, [academicPlan]);
 
   // 코스 추가
@@ -152,7 +213,6 @@ export function usePlanner() {
     removeSavedCourse,
     clearSemester,
     generatePlan,
-    clearSavedCourses,  
-    setSavedCourses,
+    clearSavedCourses
   };
 }
