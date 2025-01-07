@@ -30,6 +30,7 @@ export interface Course {
   term: string[];
   gradeDistribution: string | GradeDistribution;
   createdAt?: string;
+  semesterId?: string;  // 추가
   updatedAt?: string;
 }
 

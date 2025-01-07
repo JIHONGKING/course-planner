@@ -213,6 +213,7 @@ export function usePlanner() {
     removeSavedCourse,
     clearSemester,
     generatePlan,
-    clearSavedCourses
+    clearSavedCourses,
+    moveCourse
   };
 }

@@ -9,24 +9,24 @@ interface CourseCardProps {
   onAdd?: (course: Course) => void;
   onRemove?: () => void;
   onInfo?: (course: Course) => void;
-  onClick?: () => void;  // 추가됨
+  onClick?: () => void;
   showPrerequisites?: boolean;
   isInPlan?: boolean;
   className?: string;
 }
 
-export default function CourseCard({ 
+ export default function CourseCard({
   course, 
   onAdd,
   onRemove,
   onInfo,
-  onClick,  // 추가됨
+  onClick,
   showPrerequisites = true,
   isInPlan = false,
   className = ''
 }: CourseCardProps) {
+    console.log('Rendering CourseCard:', course.code);  // 디버그 로그 추가
   const handleClick = (e: React.MouseEvent) => {
-    // 다른 버튼 클릭시에는 onClick이 발생하지 않도록
     if ((e.target as HTMLElement).closest('button')) {
       return;
     }

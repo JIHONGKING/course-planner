@@ -41,6 +41,7 @@ export default function Home() {
     calculateCredits,
     calculateYearCredits,
     addCourse,
+    moveCourse,
     removeCourse,
     saveCourse,
     removeSavedCourse,
@@ -54,6 +55,13 @@ export default function Home() {
     validateCourseSelection,
     clearValidationError
   } = usePrerequisiteValidation();
+
+  const handleMoveCourse = (courseId: string, fromSemesterId: string, toSemesterId: string) => {
+    console.log('Moving course:', { courseId, fromSemesterId, toSemesterId });
+    moveCourse(fromSemesterId, toSemesterId, courseId);
+  };
+
+  
   
   const [preferences, setPreferences] = useState({
     school: '',
@@ -236,6 +244,20 @@ export default function Home() {
             />
           </div>
 
+          <div className="container mx-auto py-8">
+        {academicPlan.map((year) => (
+          <AcademicYear
+            key={year.id}
+            year={year}
+            onRemoveCourse={removeCourse}
+            onAddCourse={(semesterId, course) => addCourse(course, semesterId)}
+            onMoveCourse={handleMoveCourse}
+            onClearSemester={clearSemester}
+          />
+        ))}
+      </div>
+      
+
           {/* Course Search Results */}
           <div className="space-y-2">
             {loading && (
@@ -314,6 +336,7 @@ export default function Home() {
         removeSavedCourse(course.id);
       }}
       onClearSemester={clearSemester}
+      onMoveCourse={handleMoveCourse}  // 추가된 부분
     />
   ))}
 </div>

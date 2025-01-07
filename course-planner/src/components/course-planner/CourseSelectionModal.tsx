@@ -43,12 +43,22 @@ export default function CourseSelectionModal({
           ...filters
         });
 
-        const response = await fetch(`/api/courses?${params}`);
+        const response = await fetch(`/api/courses/search?${params}`);
         const data = await response.json();
-        setCourses(data.courses);
-        setTotalPages(data.totalPages);
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch courses');
+        }
+
+        const filteredCourses = data.courses.filter(
+          (course: Course) => !currentSemesterCourses?.some(c => c.id === course.id)
+        );
+        
+        setCourses(filteredCourses);
+        setTotalPages(data.totalPages || 1);
       } catch (error) {
         console.error('Failed to search courses:', error);
+        setCourses([]);
       } finally {
         setLoading(false);
       }
@@ -56,33 +66,22 @@ export default function CourseSelectionModal({
 
     const timer = setTimeout(searchCourses, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm, page, filters]);
+  }, [searchTerm, page, filters, currentSemesterCourses]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
   };
 
-  const getGradeA = (gradeDistribution: string | GradeDistribution): string => {
-    if (typeof gradeDistribution === 'string') {
-      try {
-        const parsed = JSON.parse(gradeDistribution);
-        return parsed.A.toString();
-      } catch {
-        return '0';
-      }
-    }
-    return gradeDistribution.A.toString();
-  };
-  
-
-  const isCourseInSemester = (courseId: string) => {
-    return currentSemesterCourses.some(course => course.id === courseId);
-  };
-
   return (
-    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
+    <Dialog 
+      open={isOpen} 
+      onClose={onClose} 
+      className="relative z-50"
+    >
+      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
 
+      {/* Full-screen container */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="mx-auto max-w-2xl w-full bg-white rounded-xl shadow-lg p-6">
           {/* Header */}
@@ -159,10 +158,8 @@ export default function CourseSelectionModal({
               courses.map((course) => (
                 <div
                   key={course.id}
-                  onClick={() => !isCourseInSemester(course.id) && onSelect(course)}
-                  className={`p-4 border border-gray-200 rounded-md hover:bg-gray-50 ${
-                    isCourseInSemester(course.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                  }`}
+                  onClick={() => onSelect(course)}
+                  className={`p-4 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer`}
                 >
                   <div className="flex justify-between items-start">
                     <div>

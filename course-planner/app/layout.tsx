@@ -1,15 +1,13 @@
 // app/layout.tsx
+'use client';
+
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import ClientDndProvider from '@/components/common/ClientDndProvider';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'UW Course Planner',
-  description: 'Plan your UW-Madison courses with ease',
-};
 
 export default function RootLayout({
   children,
@@ -19,9 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ClientDndProvider>
+        <DndProvider backend={HTML5Backend}>
           {children}
-        </ClientDndProvider>
+        </DndProvider>
       </body>
     </html>
   );
