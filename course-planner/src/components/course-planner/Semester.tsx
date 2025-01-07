@@ -1,14 +1,16 @@
 // src/components/course-planner/Semester.tsx
-import { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { useDrop } from 'react-dnd';
 import { Plus, Trash2, Info } from 'lucide-react';
 import type { Course } from '@/types/course';
+import type { DropTargetMonitor } from 'react-dnd';
 import DraggableCourseCard from '@/components/common/DraggableCourseCard';
 import { CREDITS_PER_SEMESTER } from '@/data/constants';
-import CourseSelectionModal from './CourseSelectionModal';  // 추가
+import CourseSelectionModal from './CourseSelectionModal';
 
-
-interface DropItem {
+interface DragItem {
+  type: 'course';
   courseId: string;
   sourceId?: string;
   course: Course;
@@ -24,7 +26,7 @@ interface SemesterProps {
   onClearSemester: () => void;
   onRemoveCourse: (courseId: string) => void;
   onAddCourse: (course: Course) => void;
-  onMoveCourse?: (courseId: string, fromSemesterId: string, toSemesterId: string) => void;
+  onMoveCourse: (courseId: string, fromSemesterId: string, toSemesterId: string) => void;
   calculateCredits: (semesterId: string) => number;
 }
 
@@ -36,102 +38,79 @@ export default function Semester({
   onMoveCourse,
   calculateCredits
 }: SemesterProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false); // 모달 상태 추가
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDropping, setIsDropping] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const handleAddCourseClick = () => {
-    setIsModalOpen(true);  // Add Course 버튼 클릭시 모달 열기
-  };
+  // 현재 학기의 총 학점 계산을 메모이제이션
+  const currentCredits = useMemo(() => 
+    calculateCredits(semester.id), 
+    [calculateCredits, semester.id]
+  );
 
-  const handleCourseSelect = (course: Course) => {
-    onAddCourse(course);  // 선택된 과목 추가
-    setIsModalOpen(false);  // 모달 닫기
-  };
+  // 드롭 가능 여부 검증 로직을 메모이제이션
+  const canAcceptDrop = useCallback((item: DragItem) => {
+    if (!item || !item.course) return false;
+    
+    // 같은 학기면 드롭 불가
+    if (item.sourceId === semester.id) return false;
+    
+    // 학점 제한 체크
+    const wouldExceedLimit = currentCredits + item.course.credits > CREDITS_PER_SEMESTER.max;
+    
+    // 학기 제공 여부 체크
+    const isOfferedInTerm = item.course.term.includes(semester.term);
+    
+    return !wouldExceedLimit && isOfferedInTerm;
+  }, [currentCredits, semester.id, semester.term]);
 
+  // 드롭 핸들러 최적화
+  const handleDrop = useCallback((item: DragItem) => {
+    if (item.sourceId === semester.id) return;
 
-  // useDrop 훅으로 드롭 영역 설정
-  const [{ isOver, canDrop }, drop] = useDrop(() => ({
+    setIsDropping(true);
+    onMoveCourse(item.courseId, item.sourceId || '', semester.id);
+    
+    // 드롭 애니메이션
+    setTimeout(() => setIsDropping(false), 500);
+  }, [semester.id, onMoveCourse]);
+
+  // useDrop 훅 최적화
+  const [{ isOver, canDrop }, drop] = useDrop({
     accept: 'course',
-    
-    // 드롭 가능 여부 체크
-    canDrop: (item: DropItem) => {
-      const currentCredits = calculateCredits(semester.id);
-      const wouldExceedLimit = currentCredits + item.course.credits > CREDITS_PER_SEMESTER.max;
-      const isSameSemester = item.sourceId === semester.id;
-      
-      console.log('Checking if can drop:', {
-        semesterId: semester.id,
-        currentCredits,
-        wouldAdd: item.course.credits,
-        wouldExceedLimit,
-        isSameSemester
-      });
-
-      return !wouldExceedLimit && !isSameSemester;
+    canDrop: (item: DragItem, monitor: DropTargetMonitor) => {
+      return canAcceptDrop(item);
     },
-    
-    // 드롭 처리
-    drop: (item: DropItem) => {
-      console.log('Drop event:', {
-        course: item.course.code,
-        fromSemester: item.sourceId,
-        toSemester: semester.id
-      });
-
-      // 드롭 애니메이션
-      setIsDropping(true);
-      setTimeout(() => setIsDropping(false), 500);
-
-      // 과목 이동 또는 추가
-      if (item.sourceId && onMoveCourse) {
-        onMoveCourse(item.courseId, item.sourceId, semester.id);
-      } else {
-        onAddCourse(item.course);
-      }
-
-      return { semesterId: semester.id };
-    },
-
-    // 드래그 요소가 드롭 영역 위에 있을 때
-    hover: (item: DropItem, monitor) => {
-      console.log('Hover:', {
-        course: item.course.code,
-        overSemester: semester.id,
-        canDrop: monitor.canDrop()
-      });
-    },
-
-    // 상태 수집
-    collect: (monitor) => ({
+    drop: handleDrop,
+    collect: (monitor: DropTargetMonitor) => ({
       isOver: monitor.isOver(),
-      canDrop: monitor.canDrop()
-    })
-  }), [semester.id, calculateCredits, onMoveCourse, onAddCourse]);
+      canDrop: monitor.canDrop(),
+    }),
+  });
 
-  // ref에 drop 기능 연결
-  useEffect(() => {
-    drop(ref);
-  }, [drop]);
+  // 모달 핸들러 메모이제이션
+  const handleCourseSelect = useCallback((course: Course) => {
+    onAddCourse(course);
+    setIsModalOpen(false);
+  }, [onAddCourse]);
 
-  const totalCredits = calculateCredits(semester.id);
-  const remainingSlots = 6 - semester.courses.length;
-
-  // 드롭 영역의 상태에 따른 스타일
-  const getDropzoneStyle = () => {
+  // 드롭 영역 스타일 계산을 메모이제이션
+  const dropzoneStyle = useMemo(() => {
     if (isOver && !canDrop) return 'border-red-400 bg-red-50';
     if (isOver && canDrop) return 'border-blue-400 bg-blue-50';
     if (isDropping) return 'border-green-400 bg-green-50';
     return 'border-gray-200';
-  };
+  }, [isOver, canDrop, isDropping]);
+
+  // drop ref 연결
+  drop(ref);
 
   return (
     <div
       ref={ref}
       className={`
         relative border-2 rounded-lg transition-colors duration-200
-        ${getDropzoneStyle()}
+        ${dropzoneStyle}
       `}
       data-semester-id={semester.id}
     >
@@ -143,17 +122,11 @@ export default function Semester({
           </h3>
           <div className="flex items-center space-x-2">
             <span className={`text-sm font-medium ${
-              totalCredits > CREDITS_PER_SEMESTER.max ? 'text-red-600' : 'text-gray-700'
+              currentCredits > CREDITS_PER_SEMESTER.max ? 'text-red-600' : 'text-gray-700'
             }`}>
-              {totalCredits} credits
+              {currentCredits} credits
             </span>
             <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="p-1 text-gray-400 hover:text-gray-600"
-            >
-              <Info className="h-4 w-4" />
-            </button>
-            <button 
               onClick={onClearSemester}
               className="p-1 text-gray-400 hover:text-red-500 transition-colors"
             >
@@ -161,23 +134,9 @@ export default function Semester({
             </button>
           </div>
         </div>
-
-        {/* Settings Dropdown */}
-        {isDropdownOpen && (
-          <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
-            <div className="py-1">
-              <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                학기 설정
-              </button>
-              <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                GPA 계산
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Course List */}
+      {/* Courses List with Optimized Rendering */}
       <div className="p-4 space-y-2 min-h-[100px]">
         {semester.courses.map((course) => (
           <DraggableCourseCard
@@ -198,9 +157,9 @@ export default function Semester({
         )}
 
         {/* Add Course Button */}
-        {remainingSlots > 0 && (
+        {semester.courses.length < 6 && (
           <button
-            onClick={handleAddCourseClick}
+            onClick={() => setIsModalOpen(true)}
             className="w-full p-3 border border-gray-200 rounded-md 
                      hover:bg-gray-50 flex items-center justify-center 
                      text-gray-500 hover:text-gray-700"
@@ -211,14 +170,7 @@ export default function Semester({
         )}
       </div>
 
-      {/* Drop Overlay */}
-      {isOver && (
-        <div 
-          className={`absolute inset-0 pointer-events-none rounded-lg border-2 
-                     ${canDrop ? 'border-blue-400' : 'border-red-400'}`}
-        />
-      )}
-      {/* Course Selection Modal 추가 */}
+      {/* Course Selection Modal */}
       <CourseSelectionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -231,6 +183,5 @@ export default function Semester({
         <div className="absolute inset-0 bg-green-100 opacity-50 pointer-events-none rounded-lg" />
       )}
     </div>
-
   );
 }

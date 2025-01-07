@@ -1,3 +1,4 @@
+// app/page.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -11,6 +12,8 @@ import CourseCard from '@/components/common/CourseCard';
 import Semester from '@/components/course-planner/Semester';
 import SavedCourses from '@/components/course-planner/SavedCourses';
 import AcademicYear from '@/components/course-planner/AcademicYear';
+import GraduationRequirements from '@/components/course-planner/GraduationRequirements';
+import CourseRecommendations from '@/components/course-planner/CourseRecommendations';
 
 function isGradeDistribution(value: any): value is GradeDistribution {
   return value && typeof value === 'object' && 'A' in value;
@@ -56,13 +59,6 @@ export default function Home() {
     clearValidationError
   } = usePrerequisiteValidation();
 
-  const handleMoveCourse = (courseId: string, fromSemesterId: string, toSemesterId: string) => {
-    console.log('Moving course:', { courseId, fromSemesterId, toSemesterId });
-    moveCourse(fromSemesterId, toSemesterId, courseId);
-  };
-
-  
-  
   const [preferences, setPreferences] = useState({
     school: '',
     major: '',
@@ -71,9 +67,38 @@ export default function Home() {
     planningStrategy: 'grades' as 'grades' | 'workload' | 'balanced'
   });
 
-  // 임시 상태들 (나중에 전역 상태 관리로 이동 예정)
   const [completedCourses, setCompletedCourses] = useState<Course[]>([]);
   const [currentTermCourses, setCurrentTermCourses] = useState<Course[]>([]);
+
+  const handleMoveCourse = (courseId: string, fromSemesterId: string, toSemesterId: string) => {
+    console.log('handleMoveCourse called:', { courseId, fromSemesterId, toSemesterId });
+    
+    let courseToMove: Course | undefined;
+    const updatedPlan = [...academicPlan].map(year => ({
+      ...year,
+      semesters: year.semesters.map(semester => {
+        if (semester.id === fromSemesterId) {
+          courseToMove = semester.courses.find(c => c.id === courseId);
+          console.log('Found course to move:', courseToMove);
+          return {
+            ...semester,
+            courses: semester.courses.filter(c => c.id !== courseId)
+          };
+        }
+        if (semester.id === toSemesterId && courseToMove) {
+          console.log('Adding course to new semester:', courseToMove);
+          return {
+            ...semester,
+            courses: [...semester.courses, courseToMove]
+          };
+        }
+        return semester;
+      })
+    }));
+
+    console.log('Updated plan:', updatedPlan);
+    moveCourse(courseId, fromSemesterId, toSemesterId);
+  };
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) return;
@@ -137,9 +162,9 @@ export default function Home() {
       setSortOrder('desc');
     }
   };
-
   return (
     <div className="min-h-screen bg-white">
+      {/* Header Section */}
       <div className="bg-white border-b border-gray-200 py-4">
         <div className="container mx-auto px-6">
           {/* School Selection */}
@@ -220,72 +245,71 @@ export default function Home() {
               </div>
             </div>
           </div>
-
-          {/* Validation Error Display */}
-          {validationError && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-start">
-                <Info className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
-                <p className="text-red-600">{validationError}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Search and Course List */}
+          {/* Search Input */}
           <div className="relative mb-4">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className={`h-5 w-5 ${loading ? 'text-blue-500' : 'text-gray-400'}`} />
-            </div>
-            <input
-              type="text"
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search courses by name, number, or instructor"
-              className="w-full pl-10 pr-4 py-2 border rounded-md"
-            />
-          </div>
-
-          <div className="container mx-auto py-8">
-        {academicPlan.map((year) => (
-          <AcademicYear
-            key={year.id}
-            year={year}
-            onRemoveCourse={removeCourse}
-            onAddCourse={(semesterId, course) => addCourse(course, semesterId)}
-            onMoveCourse={handleMoveCourse}
-            onClearSemester={clearSemester}
-          />
-        ))}
-      </div>
-      
-
-          {/* Course Search Results */}
-          <div className="space-y-2">
-            {loading && (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className={`h-5 w-5 ${loading ? 'text-blue-500' : 'text-gray-400'}`} />
               </div>
-            )}
-
-            {error && (
-              <div className="text-center py-8 text-red-500">
-                Failed to load courses. Please try again.
-              </div>
-            )}
-
-            {courses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                onClick={() => handleCourseClick(course)}
-                showPrerequisites={true}
+              <input
+                type="text"
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search courses by name, number, or instructor"
+                className="w-full pl-10 pr-4 py-2 border rounded-md"
               />
-            ))}
-          </div>
+            </div>
+            {/* Course Search Results */}
+            <div className="space-y-2">
+              {loading && (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
+                </div>
+              )}
+
+              {error && (
+                <div className="text-center py-8 text-red-500">
+                  Failed to load courses. Please try again.
+                </div>
+              )}
+
+              {courses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  onClick={() => handleCourseClick(course)}
+                  showPrerequisites={true}
+                />
+              ))}
+            </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
+
+      {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Graduation Requirements */}
+            <GraduationRequirements />
+
+            {/* Validation Error Display */}
+            {validationError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <Info className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
+                  <p className="text-red-600">{validationError}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column */}
+          <div>
+            <CourseRecommendations />
+          </div>
+        </div>
+
         {/* Auto Fill Preview Banner */}
         {isPlanGenerated && (
           <div className="mb-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -324,22 +348,22 @@ export default function Home() {
           ))}
         </div>
 
-{/* Academic Plan Display */}
-<div className="space-y-8">
-  {academicPlan.map((academicYear) => (
-    <AcademicYear
-      key={academicYear.id}
-      year={academicYear}  // academicYear는 이미 필요한 모든 필드를 포함
-      onRemoveCourse={removeCourse}
-      onAddCourse={(semesterId, course) => {
-        addCourse(course, semesterId);
-        removeSavedCourse(course.id);
-      }}
-      onClearSemester={clearSemester}
-      onMoveCourse={handleMoveCourse}  // 추가된 부분
-    />
-  ))}
-</div>
+        {/* Academic Plan Display */}
+        <div className="space-y-8">
+          {academicPlan.map((academicYear) => (
+            <AcademicYear
+              key={academicYear.id}
+              year={academicYear}
+              onRemoveCourse={removeCourse}
+              onAddCourse={(semesterId, course) => {
+                addCourse(course, semesterId);
+                removeSavedCourse(course.id);
+              }}
+              onClearSemester={clearSemester}
+              onMoveCourse={handleMoveCourse}
+            />
+          ))}
+        </div>
 
         {/* Saved Courses Section */}
         <SavedCourses

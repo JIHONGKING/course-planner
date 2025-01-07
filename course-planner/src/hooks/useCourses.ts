@@ -1,8 +1,12 @@
-import { useState, useCallback } from 'react';
-import type { Course } from '@/types/course';
-import { sortCourses, type SortOption, type SortOrder } from '@/utils/sortUtils';
+// src/hooks/useCourses.ts
 
-export interface FilterOptions {
+import { useState, useCallback } from 'react';
+import { useCourseCache } from './useCourseCache';
+import type { Course } from '@/types/course';
+import type { SortOption, SortOrder } from '@/utils/sortUtils';
+import { sortCourses } from '@/utils/sortUtils';
+
+interface FilterOptions {
   department: string;
   level: string;
   credits: string;
@@ -24,29 +28,45 @@ export function useCourses() {
     term: ''
   });
 
+  const {
+    getCachedSearchResults,
+    setCachedSearchResults,
+    invalidateSearchCache
+  } = useCourseCache();
+
   const searchCourses = useCallback(async (searchTerm: string) => {
     if (!searchTerm.trim()) {
       setCourses([]);
       return;
     }
 
+    // 캐시 키 생성 (검색어 + 필터 + 정렬 조건)
+    const cacheKey = JSON.stringify({
+      search: searchTerm,
+      filters,
+      sort: { by: sortBy, order: sortOrder },
+      page: currentPage
+    });
+
+    // 캐시된 결과 확인
+    const cachedResults = getCachedSearchResults(cacheKey);
+    if (cachedResults) {
+      setCourses(cachedResults);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Build query parameters
+      // 쿼리 파라미터 구성
       const params = new URLSearchParams({
-        query: searchTerm.trim(),
+        query: searchTerm,
         page: String(currentPage),
         sortBy,
-        order: sortOrder
+        order: sortOrder,
+        ...filters
       });
-
-      // Add filters to params if they exist
-      if (filters.department) params.append('department', filters.department);
-      if (filters.level) params.append('level', filters.level);
-      if (filters.credits) params.append('credits', filters.credits);
-      if (filters.term) params.append('term', filters.term);
 
       const response = await fetch(`/api/courses/search?${params}`);
       if (!response.ok) {
@@ -54,53 +74,80 @@ export function useCourses() {
       }
 
       const data = await response.json();
-      
+
       if (data.error) {
         throw new Error(data.error);
       }
 
-      setCourses(sortCourses(data.courses, sortBy, sortOrder));
-      setTotalPages(data.totalPages);
-      setCurrentPage(data.page);
+      // 결과 정렬 및 캐싱
+      const sortedCourses = sortCourses(data.courses, sortBy, sortOrder);
+      setCachedSearchResults(cacheKey, sortedCourses);
+      
+      setCourses(sortedCourses);
+      setTotalPages(data.totalPages || 1);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search courses');
       setCourses([]);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, sortBy, sortOrder, filters]);
+  }, [filters, sortBy, sortOrder, currentPage, getCachedSearchResults, setCachedSearchResults]);
 
   const handleSortChange = useCallback((newSortBy: SortOption) => {
     setSortBy(newSortBy);
-    setCourses(prev => sortCourses(prev, newSortBy, sortOrder));
+    try {
+      setCourses(prev => sortCourses(prev, newSortBy, sortOrder));
+    } catch (err) {
+      console.error('Error sorting courses:', err);
+    }
   }, [sortOrder]);
 
   const toggleSortOrder = useCallback(() => {
-    setSortOrder(prev => {
-      const newOrder = prev === 'asc' ? 'desc' : 'asc';
-      setCourses(prev => sortCourses(prev, sortBy, newOrder));
-      return newOrder;
-    });
+    try {
+      setSortOrder(prev => {
+        const newOrder = prev === 'asc' ? 'desc' : 'asc';
+        setCourses(prevCourses => sortCourses(prevCourses, sortBy, newOrder));
+        return newOrder;
+      });
+    } catch (err) {
+      console.error('Error toggling sort order:', err);
+    }
   }, [sortBy]);
 
   const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-  }, []);
+    try {
+      setCurrentPage(page);
+      invalidateSearchCache();
+    } catch (err) {
+      console.error('Error changing page:', err);
+    }
+  }, [invalidateSearchCache]);
 
   const handleFilterChange = useCallback((newFilters: FilterOptions) => {
-    setFilters(newFilters);
-    setCurrentPage(1); // Reset to first page when filters change
-  }, []);
+    try {
+      setFilters(newFilters);
+      setCurrentPage(1);
+      invalidateSearchCache();
+    } catch (err) {
+      console.error('Error changing filters:', err);
+    }
+  }, [invalidateSearchCache]);
 
   const clearFilters = useCallback(() => {
-    setFilters({
-      department: '',
-      level: '',
-      credits: '',
-      term: ''
-    });
-    setCurrentPage(1);
-  }, []);
+    try {
+      setFilters({
+        department: '',
+        level: '',
+        credits: '',
+        term: ''
+      });
+      setCurrentPage(1);
+      invalidateSearchCache();
+    } catch (err) {
+      console.error('Error clearing filters:', err);
+    }
+  }, [invalidateSearchCache]);
 
   return {
     courses,

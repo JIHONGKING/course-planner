@@ -1,89 +1,182 @@
-// src/components/common/PrerequisiteValidator.tsx
-import React from 'react';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-import type { Course } from '@/types/course';
+import React, { useMemo } from 'react';
+import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import type { Course, Prerequisite } from '@/types/course';
 
-interface PrerequisiteValidatorProps {
+interface ValidatorProps {
   course: Course;
   completedCourses: Course[];
   currentTermCourses: Course[];
+  term: string;
+}
+
+interface ValidationResult {
+  isValid: boolean;
+  prereqStatus: {
+    courseId: string;
+    status: 'completed' | 'inProgress' | 'missing';
+    type: 'required' | 'concurrent' | 'recommended';
+    grade?: string;
+  }[];
+  messages: string[];
 }
 
 export default function PrerequisiteValidator({
   course,
   completedCourses,
-  currentTermCourses
-}: PrerequisiteValidatorProps) {
-  const prereqStatus = course.prerequisites.map(prereq => {
-    const isCompleted = completedCourses.some(c => c.code === prereq.courseId);
-    const isInCurrentTerm = currentTermCourses.some(c => c.code === prereq.courseId);
-    
-    return {
-      courseId: prereq.courseId,
-      status: isCompleted ? 'completed' : isInCurrentTerm ? 'current' : 'missing',
-      type: prereq.type,
-      grade: prereq.grade
-    };
-  });
+  currentTermCourses,
+  term
+}: ValidatorProps) {
+  const validation = useMemo((): ValidationResult => {
+    const prereqStatus = course.prerequisites.map(prereq => {
+      // 이미 완료한 과목인지 확인
+      const isCompleted = completedCourses.some(c => c.code === prereq.courseId);
+      
+      // 현재 학기에 수강 중인지 확인
+      const isInProgress = currentTermCourses.some(c => c.code === prereq.courseId);
+      
+      // 상태 결정
+      let status: 'completed' | 'inProgress' | 'missing';
+      if (isCompleted) {
+        status = 'completed';
+      } else if (isInProgress) {
+        status = 'inProgress';
+      } else {
+        status = 'missing';
+      }
 
-  const allPrereqsMet = prereqStatus.every(
-    status => status.status === 'completed' || 
-    (status.type !== 'required' && status.status === 'current')
-  );
+      return {
+        courseId: prereq.courseId,
+        status,
+        type: prereq.type,
+        grade: prereq.grade
+      };
+    });
+
+    // 전체 유효성 검사
+    const isValid = prereqStatus.every(status => 
+      status.status === 'completed' || 
+      (status.type !== 'required' && status.status === 'inProgress')
+    );
+
+    // 메시지 생성
+    const messages: string[] = [];
+    
+    // 학기 제공 여부 확인
+    if (!course.term.includes(term)) {
+      messages.push(`This course is not offered in ${term} term`);
+    }
+
+    // 선수과목 관련 메시지
+    const missingRequired = prereqStatus
+      .filter(p => p.status === 'missing' && p.type === 'required')
+      .map(p => p.courseId);
+    
+    if (missingRequired.length > 0) {
+      messages.push(
+        `Missing required prerequisites: ${missingRequired.join(', ')}`
+      );
+    }
+
+    const missingRecommended = prereqStatus
+      .filter(p => p.status === 'missing' && p.type === 'recommended')
+      .map(p => p.courseId);
+    
+    if (missingRecommended.length > 0) {
+      messages.push(
+        `Recommended prerequisites: ${missingRecommended.join(', ')}`
+      );
+    }
+
+    return { isValid, prereqStatus, messages };
+  }, [course, completedCourses, currentTermCourses, term]);
+
+  if (!course.prerequisites.length) {
+    return (
+      <div className="flex items-center gap-2 text-gray-500 p-2">
+        <Info className="h-4 w-4" />
+        <span>No prerequisites required</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-2 space-y-2">
+    <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+      {/* 전체 상태 표시 */}
       <div className="flex items-center gap-2">
-        {allPrereqsMet ? (
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
+        {validation.isValid ? (
+          <CheckCircle className="h-5 w-5 text-green-500" />
         ) : (
           <AlertTriangle className="h-5 w-5 text-yellow-500" />
         )}
-        <span className="text-sm font-medium">
-          Prerequisites Status
+        <span className={`font-medium ${
+          validation.isValid ? 'text-green-700' : 'text-yellow-700'
+        }`}>
+          {validation.isValid 
+            ? 'All prerequisites are met' 
+            : 'Some prerequisites are missing'}
         </span>
       </div>
 
-      {prereqStatus.length > 0 ? (
+      {/* 경고 메시지 */}
+      {validation.messages.length > 0 && (
         <div className="space-y-1">
-          {prereqStatus.map(status => (
-            <div 
-              key={status.courseId}
-              className="flex items-center gap-2 text-sm"
-            >
-              <span 
-                className={`w-2 h-2 rounded-full ${
-                  status.status === 'completed' ? 'bg-green-500' :
-                  status.status === 'current' ? 'bg-blue-500' :
-                  'bg-yellow-500'
-                }`}
-              />
-              <span className="text-gray-700">{status.courseId}</span>
-              {status.grade && (
-                <span className="text-xs text-gray-500">
-                  (Grade {status.grade} or higher required)
-                </span>
-              )}
-              <span className={`text-xs ${
-                status.type === 'required' ? 'text-red-500' : 'text-yellow-500'
-              }`}>
-                ({status.type})
-              </span>
-              <span className={`text-xs ${
-                status.status === 'completed' ? 'text-green-500' :
-                status.status === 'current' ? 'text-blue-500' :
-                'text-yellow-500'
-              }`}>
-                {status.status === 'completed' ? 'Completed' :
-                 status.status === 'current' ? 'In Progress' :
-                 'Not Taken'}
-              </span>
+          {validation.messages.map((message, index) => (
+            <div key={index} className="text-sm text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>{message}</span>
             </div>
           ))}
         </div>
-      ) : (
-        <p className="text-sm text-gray-500">No prerequisites required</p>
       )}
+
+      {/* 선수과목 상세 상태 */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium text-gray-700">Prerequisites Status:</h4>
+        <div className="grid gap-2">
+          {validation.prereqStatus.map((status) => (
+            <div 
+              key={status.courseId}
+              className="flex items-center justify-between p-2 bg-white rounded border"
+            >
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  status.status === 'completed' ? 'bg-green-500' :
+                  status.status === 'inProgress' ? 'bg-blue-500' :
+                  'bg-yellow-500'
+                }`} />
+                <span className="text-sm font-medium">{status.courseId}</span>
+                {status.grade && (
+                  <span className="text-xs text-gray-500">
+                    (Grade {status.grade} or higher required)
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded ${
+                  status.type === 'required' 
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {status.type}
+                </span>
+                <span className={`text-xs px-2 py-1 rounded ${
+                  status.status === 'completed'
+                    ? 'bg-green-100 text-green-700'
+                    : status.status === 'inProgress'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {status.status === 'completed'
+                    ? 'Completed'
+                    : status.status === 'inProgress'
+                    ? 'In Progress'
+                    : 'Not Taken'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

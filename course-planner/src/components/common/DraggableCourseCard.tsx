@@ -1,9 +1,12 @@
 // src/components/common/DraggableCourseCard.tsx
-import React, { useRef, useEffect } from 'react';
+
+import React, { useRef, useMemo, useCallback } from 'react';
 import { useDrag } from 'react-dnd';
 import { X, GripHorizontal } from 'lucide-react';
 import type { Course } from '@/types/course';
 import { getGradeA } from '@/utils/gradeUtils';
+import type { DragSourceMonitor } from 'react-dnd';
+
 
 interface DraggableCourseCardProps {
   course: Course;
@@ -11,70 +14,73 @@ interface DraggableCourseCardProps {
   sourceId?: string;
 }
 
-export default function DraggableCourseCard({ 
+interface DragItem {
+  type: 'course';
+  courseId: string;
+  sourceId?: string;
+  course: Course;
+}
+
+
+const DraggableCourseCard = React.memo(({ 
   course, 
   onRemove,
   sourceId 
-}: DraggableCourseCardProps) {
+}: DraggableCourseCardProps) => {
   const ref = useRef<HTMLDivElement>(null);
 
-  // useDrag 훅으로 드래그 가능한 요소 설정
-  const [{ isDragging }, drag] = useDrag(() => ({
-    type: 'course',
-    
-    // 드래그할 데이터
-    item: () => {
-      console.log('Started dragging:', course.code);
-      return { 
-        courseId: course.id,
-        sourceId,
-        course 
-      };
-    },
-
-    // 드래그 끝났을 때    
-    end: (item, monitor) => {
-      const dropResult = monitor.getDropResult();
-      console.log('Drag ended:', { 
-        dropResult,
-        wasDropped: monitor.didDrop(),
-        course: course.code
-      });
-    },
-
-    // 드래그 가능 여부
-    canDrag: () => {
-      return true; // 항상 드래그 가능
-    },
-
-    // 상태 수집
-    collect: (monitor) => {
-      const isDragging = monitor.isDragging();
-      console.log('Drag state for course', course.code, ':', isDragging);
-      return {
-        isDragging
-      };
-    }
+  // 드래그 아이템 데이터 메모이제이션
+  const dragItem = useMemo(() => ({
+    type: 'course' as const,
+    courseId: course.id,
+    sourceId,
+    course
   }), [course, sourceId]);
 
-  // ref에 drag 기능 연결
-  useEffect(() => {
-    if (ref.current) {
-      drag(ref);
-      console.log('Drag handler attached for:', course.code);
-    }
-  }, [drag, course.code]);
+  // 드래그 핸들러 최적화
+  const [{ isDragging }, drag] = useDrag({
+    type: 'course',
+    item: dragItem,
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging()
+    }),
+    end: useCallback((item: DragItem | undefined, monitor: DragSourceMonitor) => {
+      const dropResult = monitor.getDropResult();
+      if (dropResult) {
+        console.log('Drag ended successfully:', { 
+          dropResult, 
+          course: course.code 
+        });
+      }
+    }, [course.code])
+  });
+
+  // 성적 데이터 메모이제이션
+  const gradeA = useMemo(() => 
+    getGradeA(course.gradeDistribution), 
+    [course.gradeDistribution]
+  );
+
+  // 삭제 핸들러 메모이제이션
+  const handleRemove = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRemove?.();
+  }, [onRemove]);
+
+  // dragPreview 최적화
+  drag(ref);
 
   return (
     <div
       ref={ref}
       className={`
         group relative border rounded-md p-3 select-none
-        ${isDragging ? 'opacity-50 border-blue-500 shadow-lg' : 'border-gray-200'}
+        ${isDragging ? 'opacity-50 shadow-lg border-blue-500' : 'border-gray-200'}
         hover:border-gray-300 transition-all duration-200
         cursor-move
       `}
       data-course-id={course.id}
+      data-source-id={sourceId}
     >
       {/* Drag Handle */}
       <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-50 group-hover:opacity-100">
@@ -89,9 +95,9 @@ export default function DraggableCourseCard({
           <p className="text-xs text-gray-400">{course.credits} credits</p>
           {/* Grade Info */}
           <div className="text-xs text-green-600">
-            A: {getGradeA(course.gradeDistribution)}%
+            A: {gradeA}%
           </div>
-          {/* Drag State Indicator */}
+          {/* Drag Indicator */}
           {isDragging && (
             <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded">
               Moving...
@@ -102,21 +108,18 @@ export default function DraggableCourseCard({
         {/* Remove Button */}
         {onRemove && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
+            onClick={handleRemove}
             className="opacity-0 group-hover:opacity-100 transition-opacity p-1"
           >
             <X className="h-4 w-4 text-gray-400 hover:text-red-500" />
           </button>
         )}
       </div>
-
-      {/* Drag Preview Overlay */}
-      {isDragging && (
-        <div className="absolute inset-0 bg-blue-50 bg-opacity-50 pointer-events-none" />
-      )}
     </div>
   );
-}
+});
+
+// 디버깅을 위한 컴포넌트 이름 설정
+DraggableCourseCard.displayName = 'DraggableCourseCard';
+
+export default DraggableCourseCard;

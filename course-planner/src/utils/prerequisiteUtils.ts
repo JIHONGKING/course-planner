@@ -1,154 +1,185 @@
 // src/utils/prerequisiteUtils.ts
-import type { Course, Prerequisite, PrerequisiteValidation } from '@/types/course';
-import prisma from '@/lib/prisma';
 
-interface PrerequisiteRecord {
-  courseId: string;
-  prerequisiteId: string;
-  type: string;
-  minGrade?: string;
+import type { Course, Prerequisite } from '@/types/course';
+
+interface ValidationContext {
+  completedCourses: Course[];
+  currentTermCourses: Course[];
+  term: string;
 }
 
-export async function fetchPrerequisites(courseId: string) {
-    try {
-      // Updated to use prerequisites field from Course table
-      const course = await prisma.course.findUnique({
-        where: { id: courseId }
-      });
-  
-      if (!course) return [];
-  
-      return course.prerequisites.map(prerequisiteId => ({
-        courseId: prerequisiteId,
-        type: 'required' as const,
-        grade: undefined,
-        // Additional course details would need to be fetched separately
-      }));
-    } catch (error) {
-      console.error('Error fetching prerequisites:', error);
-      return [];
+interface ValidationResult {
+  isValid: boolean;
+  messages: string[];
+  missingPrerequisites: Prerequisite[];
+}
+
+/**
+ * 순환 참조 검사
+ */
+export function checkCircularDependencies(courses: Course[]): boolean {
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+
+  function dfs(courseId: string): boolean {
+    if (recursionStack.has(courseId)) {
+      return true; // 순환 참조 발견
     }
+
+    if (visited.has(courseId)) {
+      return false;
+    }
+
+    visited.add(courseId);
+    recursionStack.add(courseId);
+
+    const course = courses.find(c => c.id === courseId);
+    if (course) {
+      for (const prereq of course.prerequisites) {
+        if (dfs(prereq.courseId)) {
+          return true;
+        }
+      }
+    }
+
+    recursionStack.delete(courseId);
+    return false;
   }
 
-  export function parsePrerequisitesFromDescription(description: string): Prerequisite[] {
-    const prerequisites: Prerequisite[] = [];
+  return courses.some(course => dfs(course.id));
+}
+
+/**
+ * 선수과목 관계를 파싱하고 검증
+ */
+export function parseAndValidatePrerequisites(
+  description: string,
+  existingCourses: Course[]
+): Prerequisite[] {
+  const prerequisites: Prerequisite[] = [];
+  
+  // "Prerequisites:" 또는 "Prereq:" 패턴 매칭
+  const prereqMatch = description.match(/(?:Prerequisites?|Prereq):([^.]+)/i);
+  if (!prereqMatch) return prerequisites;
+
+  const prereqText = prereqMatch[1].trim();
+  
+  // AND/OR 조건 파싱
+  const orGroups = prereqText.split(/\s+or\s+/i);
+  
+  orGroups.forEach(group => {
+    const andCourses = group.split(/\s+and\s+/i);
     
-    // "Prerequisites:" 또는 "Prereq:" 다음에 오는 텍스트 찾기
-    const prereqMatch = description.match(/(?:Prerequisites?|Prereq):([^.]+)/i);
-    
-    if (prereqMatch) {
-      const prereqText = prereqMatch[1].trim();
-      
-      // 과목 코드 패턴 (예: "COMP SCI 300" 또는 "MATH 222")
-      const coursePattern = /([A-Z]+ [A-Z]+) (\d{3})/g;
-      
-      // 모든 과목 코드 매칭
-      let match;
-      while ((match = coursePattern.exec(prereqText)) !== null) {
-        const courseCode = match[0];
-        const isRequired = !prereqText.includes(`recommended: ${courseCode}`);
+    andCourses.forEach(courseText => {
+      // 과목 코드 매칭 (예: "COMP SCI 300" 또는 "MATH 222")
+      const courseMatch = courseText.match(/([A-Z]+ [A-Z]+) (\d{3})/);
+      if (courseMatch) {
+        const courseCode = courseMatch[0];
+        
+        // 과목이 실제로 존재하는지 확인
+        const exists = existingCourses.some(c => c.code === courseCode);
+        
+        // 성적 요구사항 파싱
+        const gradeMatch = courseText.match(/grade of ([A-F])/i);
         
         prerequisites.push({
           courseId: courseCode,
-          type: isRequired ? 'required' : 'recommended',
-          grade: prereqText.includes('grade of') ? parseGradeRequirement(prereqText) : undefined
+          type: courseText.toLowerCase().includes('recommended') ? 'recommended' : 'required',
+          grade: gradeMatch ? gradeMatch[1].toUpperCase() : undefined
         });
+      }
+    });
+  });
+
+  return prerequisites;
+}
+
+/**
+ * 선수과목 이수 가능 여부 검증
+ */
+export function validatePrerequisites(
+  course: Course,
+  context: ValidationContext
+): ValidationResult {
+  const missingPrerequisites: Prerequisite[] = [];
+  const messages: string[] = [];
+
+  // 1. 학기 제공 여부 확인
+  if (!course.term.includes(context.term)) {
+    messages.push(`This course is not offered in ${context.term} term`);
+  }
+
+  // 2. 선수과목 검증
+  for (const prereq of course.prerequisites) {
+    const isCompleted = context.completedCourses.some(c => c.code === prereq.courseId);
+    const isInProgress = context.currentTermCourses.some(c => c.code === prereq.courseId);
+
+    // 필수 선수과목 검증
+    if (prereq.type === 'required' && !isCompleted && !isInProgress) {
+      missingPrerequisites.push(prereq);
+      messages.push(`Missing required prerequisite: ${prereq.courseId}`);
+      if (prereq.grade) {
+        messages.push(`Grade ${prereq.grade} or higher required for ${prereq.courseId}`);
       }
     }
     
-    return prerequisites;
-  }
-  
-  function parseGradeRequirement(text: string): string | undefined {
-    const gradeMatch = text.match(/grade of ([A-F])/i);
-    return gradeMatch ? gradeMatch[1].toUpperCase() : undefined;
-  }
-
-export async function syncPrerequisitesWithDatabase(course: Course): Promise<Prerequisite[]> {
-  try {
-    // Update the course's prerequisites field directly
-    await prisma.course.update({
-      where: { id: course.id },
-      data: {
-        prerequisites: {
-          set: course.prerequisites.map(p => p.courseId)
-        }
-      }
-    });
-
-    return course.prerequisites;
-  } catch (error) {
-    console.error('Error syncing prerequisites:', error);
-    return [];
-  }
-}
-
-export function validatePrerequisites(
-  course: Course,
-  completedCourses: Course[],
-  currentTermCourses: Course[]
-): PrerequisiteValidation {
-  const missingPrerequisites: Prerequisite[] = [];
-  let isValid = true;
-
-  for (const prereq of course.prerequisites) {
-    const isCompleted = completedCourses.some(c => c.id === prereq.courseId);
-    const isConcurrent = currentTermCourses.some(c => c.id === prereq.courseId);
-
-    if (!isCompleted && (prereq.type === 'required' && !isConcurrent)) {
-      isValid = false;
-      missingPrerequisites.push(prereq);
+    // 권장 선수과목 알림
+    if (prereq.type === 'recommended' && !isCompleted && !isInProgress) {
+      messages.push(`Recommended prerequisite: ${prereq.courseId}`);
     }
   }
 
-  let message = isValid 
-    ? 'All prerequisite requirements are met.' 
-    : 'The following prerequisites are needed:';
-
-  if (!isValid) {
-    const missingCoursesList = missingPrerequisites
-      .map(p => `• ${p.courseId} (${p.type === 'required' ? 'Required' : 'Recommended'})`)
-      .join('\n');
-    message += '\n' + missingCoursesList;
+  // 3. 동시 수강 과목 검증
+  const concurrentPrereqs = course.prerequisites.filter(p => p.type === 'concurrent');
+  for (const prereq of concurrentPrereqs) {
+    const isTaking = context.currentTermCourses.some(c => c.code === prereq.courseId);
+    const hasCompleted = context.completedCourses.some(c => c.code === prereq.courseId);
+    
+    if (!isTaking && !hasCompleted) {
+      messages.push(`Must take ${prereq.courseId} concurrently or complete it first`);
+    }
   }
 
-      return {
-    isValid,
-    missingPrerequisites,
-    message
+  return {
+    isValid: missingPrerequisites.length === 0,
+    messages,
+    missingPrerequisites
   };
 }
 
 /**
- * 현재 학기에 수강 가능한 과목인지 확인합니다.
+ * 선수과목 충족을 위한 최소 학기 수 계산
  */
-export function canTakeCourse(
-  course: Course,
-  completedCourses: Course[],
-  currentTermCourses: Course[],
-  term: string
-): {canTake: boolean; reason?: string} {
-  // 학기 제공 여부 확인
-  if (!course.term.includes(term)) {
-    return {
-      canTake: false,
-      reason: `This course is not offered in ${term} term.`
-    };
+export function calculateMinimumTerms(
+  targetCourse: Course,
+  allCourses: Course[]
+): number {
+  const visited = new Set<string>();
+  const memo = new Map<string, number>();
+
+  function dfs(courseId: string): number {
+    if (visited.has(courseId)) {
+      return memo.get(courseId) || 0;
+    }
+
+    visited.add(courseId);
+    const course = allCourses.find(c => c.id === courseId);
+    
+    if (!course || course.prerequisites.length === 0) {
+      memo.set(courseId, 1);
+      return 1;
+    }
+
+    const prereqTerms = course.prerequisites
+      .filter(p => p.type === 'required')
+      .map(p => dfs(p.courseId));
+
+    const maxPrereqTerms = Math.max(0, ...prereqTerms);
+    const terms = maxPrereqTerms + 1;
+    
+    memo.set(courseId, terms);
+    return terms;
   }
 
-  // 선수과목 검증
-  const prereqValidation = validatePrerequisites(
-    course,
-    completedCourses,
-    currentTermCourses
-  );
-
-  if (!prereqValidation.isValid) {
-    return {
-      canTake: false,
-      reason: prereqValidation.message
-    };
-  }
-
-  return { canTake: true };
+  return dfs(targetCourse.id);
 }
