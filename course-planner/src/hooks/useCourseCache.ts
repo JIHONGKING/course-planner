@@ -1,35 +1,25 @@
 // src/hooks/useCourseCache.ts
 
-import { useCallback } from 'react';
-import { courseCache } from '@/lib/cache';
+import { useMemo, useCallback } from 'react';
 import type { Course } from '@/types/course';
 
+
 export function useCourseCache() {
-  const getCachedCourse = useCallback((courseId: string): Course | null => {
-    return courseCache.get<Course>(`course:${courseId}`);
-  }, []);
+  const cache = useMemo(() => new Map<string, Course>(), []);
+  const coursesByDept = useMemo(() => new Map<string, Course[]>(), []);
 
-  const setCachedCourse = useCallback((course: Course) => {
-    courseCache.set(`course:${course.id}`, course);
-  }, []);
+  const getCourse = useCallback((id: string) => cache.get(id), [cache]);
+  const setCourse = useCallback((id: string, course: Course) => {
+    cache.set(id, course);
+  }, [cache]);
 
-  const getCachedSearchResults = useCallback((query: string) => {
-    return courseCache.get<Course[]>(`search:${query}`);
-  }, []);
-
-  const setCachedSearchResults = useCallback((query: string, results: Course[]) => {
-    courseCache.set(`search:${query}`, results);
-  }, []);
-
-  const invalidateSearchCache = useCallback(() => {
-    courseCache.clearPattern(/^search:/);
-  }, []);
+  const getCoursesByDepartment = useCallback((dept: string) => {
+    return coursesByDept.get(dept) || [];
+  }, [coursesByDept]);
 
   return {
-    getCachedCourse,
-    setCachedCourse,
-    getCachedSearchResults,
-    setCachedSearchResults,
-    invalidateSearchCache,
+    getCourse,
+    setCourse,
+    getCoursesByDepartment
   };
 }

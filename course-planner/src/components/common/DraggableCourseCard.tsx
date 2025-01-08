@@ -10,8 +10,11 @@ import type { DragSourceMonitor } from 'react-dnd';
 
 interface DraggableCourseCardProps {
   course: Course;
-  onRemove?: () => void;
-  sourceId?: string;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  className?: string;
+  onRemove?: () => void;    // 추가
+  sourceId?: string;        // 추가
 }
 
 interface DragItem {

@@ -1,90 +1,98 @@
 // src/types/graduation.ts
 
-export type RequirementType = 
-  | 'credits'     // 총 학점
-  | 'core'        // 핵심 과목
-  | 'breadth'     // 폭넓은 학습
-  | 'major'       // 전공 요구사항
-  | 'level'       // 수준별 요구사항
-  | 'gpa';        // 평점 요구사항
-
 export interface CourseRequirement {
-  courseId: string;
-  required: boolean;
-  alternatives?: string[];  // 대체 가능한 과목 목록
-  minimumGrade?: string;   // 최소 성적 요구사항
-}
-
-export interface CreditRequirement {
-  type: 'credits';
-  totalCredits: number;
-  minimumPerCategory?: {
-    [category: string]: number;
-  };
-}
-
-export interface CoreRequirement {
-  type: 'core';
-  courses: CourseRequirement[];
-}
-
-export interface BreadthRequirement {
-  type: 'breadth';
-  categories: {
+    courseId: string;
+    required: boolean;
+    grade?: string;
+    alternatives?: string[];  // 대체 가능한 과목 코드들
+    minimumGrade?: string;  // 옵셔널 필드 추가
+  }
+  
+  export interface CategoryRequirement {
     name: string;
-    requiredCredits: number;
     courses: string[];
-  }[];
-}
-
-export interface MajorRequirement {
-  type: 'major';
-  name: string;
-  requiredCredits: number;
-  requiredCourses: CourseRequirement[];
-  electiveCredits: number;
-  electiveCourses: string[];
-}
-
-export interface LevelRequirement {
-  type: 'level';
-  minimumUpperLevel: number;  // 상위 레벨 최소 학점
-  levels: {
-    [level: string]: number;
-  };
-}
-
-export interface GPARequirement {
-  type: 'gpa';
-  minimumGPA: number;
-  minimumMajorGPA?: number;
-}
-
-export type Requirement =
-  | CreditRequirement
-  | CoreRequirement
-  | BreadthRequirement
-  | MajorRequirement
-  | LevelRequirement
-  | GPARequirement;
-
-export interface GraduationRequirements {
-  major: string;
-  requirements: Requirement[];
-}
-
-export interface RequirementValidationResult {
-  type: RequirementType;
-  satisfied: boolean;
-  current: number;
-  required: number;
-  details: {
-    message: string;
-    items?: {
+    requiredCredits: number;
+    minimumGrade?: string;
+  }
+  
+  export interface RequirementBase {
+    id: string;
+    name: string;
+    description?: string;
+  }
+  
+  // 졸업 요건 타입들
+  export interface CreditRequirement extends RequirementBase {
+    type: 'credits';
+    totalCredits: number;
+    minimumPerCategory?: Record<string, number>;  // { "COMP SCI": 40, "MATH": 15 }
+  }
+  
+  export interface CoreRequirement extends RequirementBase {
+    type: 'core';
+    courses: CourseRequirement[];
+  }
+  
+  export interface BreadthRequirement extends RequirementBase {
+    type: 'breadth';
+    categories: CategoryRequirement[];
+    minimumCategories?: number;
+  }
+  
+  export interface MajorRequirement extends RequirementBase {
+    type: 'major';
+    majorCode: string;
+    requiredCourses: CourseRequirement[];
+    electiveCourses: string[];
+    electiveCredits: number;
+    requiredCategories?: CategoryRequirement[];
+  }
+  
+  export interface LevelRequirement extends RequirementBase {
+    type: 'level';
+    minimumUpperLevel: number;  // 300레벨 이상 최소 학점
+    levels: Record<string, number>;  // { "300": 20, "400": 9 }
+  }
+  
+  export interface GPARequirement extends RequirementBase {
+    type: 'gpa';
+    minimumGPA: number;
+    minimumMajorGPA?: number;
+  }
+  
+  export type Requirement =
+    | CreditRequirement
+    | CoreRequirement
+    | BreadthRequirement
+    | MajorRequirement
+    | LevelRequirement
+    | GPARequirement;
+  
+  // 검증 결과 타입들
+  export interface RequirementItem {
+    name: string;
+    satisfied: boolean;
+    current: number;
+    required: number;
+  }
+  
+  export interface RequirementValidationResult {
+    type: Requirement['type'];
+    satisfied: boolean;
+    current: number;
+    required: number;
+    details: {
+      message: string;
+      items: RequirementItem[];
+    };
+  }
+  
+  // 전체 졸업 요건
+  export interface GraduationRequirements {
+    major: string;
+    requirements: Requirement[];
+    concentrations?: {
       name: string;
-      satisfied: boolean;
-      current: number;
-      required: number;
+      requirements: Requirement[];
     }[];
-  };
-}
+  }

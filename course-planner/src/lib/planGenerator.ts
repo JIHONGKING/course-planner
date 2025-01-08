@@ -1,11 +1,13 @@
 // src/lib/planGenerator.ts
 
-import type { Course, AcademicPlan, AcademicYear, Semester, GradeDistribution } from '@/types/course';
+import type { Course, AcademicPlan, AcademicYear, Semester } from '@/types/course';
+import { getGradeA } from '@/utils/gradeUtils';
+import { validatePrerequisites } from '@/utils/prerequisiteUtils';
 
 interface PlanPreferences {
-  prioritizeGrades: boolean;
-  balanceWorkload: boolean;
-  includeRequirements: boolean;
+  prioritizeGrades: boolean;     // 높은 학점 우선
+  balanceWorkload: boolean;      // 워크로드 균형
+  includeRequirements: boolean;  // 졸업 요건 고려
 }
 
 interface PlanConstraints {
@@ -14,68 +16,35 @@ interface PlanConstraints {
   preferredTerms: { [courseId: string]: string[] };
 }
 
-interface CourseNode {
-  course: Course;
-  score: number;
-  dependents: Set<string>;
-  prerequisites: Set<string>;
-}
-
 export class PlanGenerator {
-  private readonly TARGET_CREDITS_PER_SEMESTER = 15;
-  private readonly MIN_CREDITS_PER_SEMESTER = 12;
-  private readonly MAX_CREDITS_PER_SEMESTER = 18;
-  private readonly COURSE_GRAPH: Map<string, CourseNode> = new Map();
+  private readonly TARGET_CREDITS = 15;
+  private readonly MAX_CREDITS = 18;
+  private readonly MIN_CREDITS = 12;
 
   generatePlan(
     courses: Course[],
     preferences: PlanPreferences,
     constraints: PlanConstraints
   ): AcademicPlan {
-    // 1. 과목 그래프 구축
-    this.buildCourseGraph(courses);
+    // 1. 선수과목 순환 참조 검사
+    if (this.checkCircularDependencies(courses)) {
+      throw new Error('Circular dependencies detected in prerequisites');
+    }
 
-    // 2. 선수과목 분석 및 레벨 할당
-    const courseLevels = this.assignCourseLevels();
-
-    // 3. 과목 점수 계산 및 정렬
-    const scoredCourses = this.scoreCourses(courses, preferences);
-
-    // 4. 연도/학기 초기화
+    // 2. 과목별 점수 계산 및 정렬
+    const scoredCourses = this.calculateCourseScores(courses, preferences);
+    
+    // 3. 학기 초기화
     const years = this.initializeYears();
-    let currentYear = 0;
-    let currentTerm = 0;
+    const semesters = this.flattenSemesters(years);
+    const completedCourses: Course[] = [];
 
-    // 5. 필수 과목 먼저 배치
-    const requiredCourses = scoredCourses.filter(c => 
-      constraints.requiredCourses.includes(c.course.code)
-    );
-    const electiveCourses = scoredCourses.filter(c => 
-      !constraints.requiredCourses.includes(c.course.code)
-    );
+    // 4. 과목 배치 (최적화된 알고리즘)
+    this.placeCourses(scoredCourses, semesters, completedCourses, constraints);
 
-    // 6. 과목 배치
-    [...requiredCourses, ...electiveCourses].forEach(({ course }) => {
-      let placed = false;
-      while (!placed && currentYear < years.length) {
-        const semester = years[currentYear].semesters[currentTerm];
-        
-        if (this.canPlaceCourse(course, semester, years, constraints)) {
-          semester.courses.push({
-            ...course,
-            semesterId: semester.id
-          });
-          placed = true;
-        } else {
-          currentTerm = (currentTerm + 1) % 3;
-          if (currentTerm === 0) currentYear++;
-        }
-      }
-    });
-
-    // 7. 워크로드 밸런싱
+    // 5. 워크로드 밸런싱
     if (preferences.balanceWorkload) {
-      this.balanceWorkload(years);
+      this.balanceWorkload(semesters);
     }
 
     return {
@@ -86,197 +55,219 @@ export class PlanGenerator {
     };
   }
 
-  private buildCourseGraph(courses: Course[]): void {
-    // 그래프 초기화
-    this.COURSE_GRAPH.clear();
-
-    // 노드 생성
-    courses.forEach(course => {
-      this.COURSE_GRAPH.set(course.id, {
+  private calculateCourseScores(courses: Course[], preferences: PlanPreferences): Course[] {
+    return courses
+      .map(course => ({
         course,
-        score: 0,
-        dependents: new Set(),
-        prerequisites: new Set(course.prerequisites.map(p => p.courseId))
-      });
-    });
-
-    // 의존성 관계 설정
-    this.COURSE_GRAPH.forEach((node, courseId) => {
-      node.prerequisites.forEach(prereqId => {
-        const prereqNode = this.COURSE_GRAPH.get(prereqId);
-        if (prereqNode) {
-          prereqNode.dependents.add(courseId);
-        }
-      });
-    });
+        score: this.calculateScore(course, preferences)
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map(({ course }) => course);
   }
 
-  private assignCourseLevels(): Map<string, number> {
-    const levels = new Map<string, number>();
-    const visited = new Set<string>();
-
-    const assignLevel = (courseId: string, level: number = 0) => {
-      if (visited.has(courseId)) return;
-      
-      visited.add(courseId);
-      levels.set(courseId, Math.max(level, levels.get(courseId) || 0));
-
-      const node = this.COURSE_GRAPH.get(courseId);
-      if (node) {
-        node.dependents.forEach(depId => {
-          assignLevel(depId, level + 1);
-        });
-      }
-    };
-
-    // 선수과목이 없는 과목부터 시작
-    this.COURSE_GRAPH.forEach((node, courseId) => {
-      if (node.prerequisites.size === 0) {
-        assignLevel(courseId);
-      }
-    });
-
-    return levels;
-  }
-
-  private scoreCourses(
-    courses: Course[],
-    preferences: PlanPreferences
-  ): { course: Course; score: number }[] {
-    return courses.map(course => ({
-      course,
-      score: this.calculateCourseScore(course, preferences)
-    })).sort((a, b) => b.score - a.score);
-  }
-
-  private calculateCourseScore(course: Course, preferences: PlanPreferences): number {
+  private calculateScore(course: Course, preferences: PlanPreferences): number {
     let score = 0;
-    const node = this.COURSE_GRAPH.get(course.id);
-    
+
+    // 1. 성적 기반 점수
     if (preferences.prioritizeGrades) {
-      const gradeDistribution = typeof course.gradeDistribution === 'string'
-        ? JSON.parse(course.gradeDistribution)
-        : course.gradeDistribution;
-      score += parseFloat(gradeDistribution.A) * 2;
+      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+      score += gradeA * 2;
     }
 
-    if (preferences.includeRequirements && node) {
-      // 선수과목이 많은 과목에 높은 점수
-      score += node.prerequisites.size * 10;
-      // 후속 과목이 많은 과목에 높은 점수
-      score += node.dependents.size * 15;
-    }
+    // 2. 선수과목 가중치
+    const prerequisiteWeight = course.prerequisites.length * 5;
+    score += prerequisiteWeight;
 
-    // 기본 점수 (학점 기반)
-    score += course.credits * 5;
+    // 3. 학점 기반 점수
+    score += course.credits * 3;
 
     return score;
   }
 
-  private canPlaceCourse(
-    course: Course,
-    semester: Semester,
-    years: AcademicYear[],
+  private placeCourses(
+    courses: Course[], 
+    semesters: Semester[], 
+    completedCourses: Course[],
     constraints: PlanConstraints
-  ): boolean {
-    // 1. 학기 제공 여부 확인
-    if (!course.term.includes(semester.term)) return false;
+  ): void {
+    const remainingCourses = [...courses];
 
-    // 2. 학점 제한 확인
-    const currentCredits = semester.courses.reduce((sum, c) => sum + c.credits, 0);
-    if (currentCredits + course.credits > constraints.maxCreditsPerSemester) return false;
+    while (remainingCourses.length > 0) {
+      const coursesToPlace = remainingCourses.filter(course =>
+        this.canTakeCourse(course, completedCourses, constraints)
+      );
 
-    // 3. 선수과목 이수 여부 확인
-    const completedCourses = new Set(
-      years.flatMap(y => y.semesters)
-        .filter(s => s.id !== semester.id)
-        .flatMap(s => s.courses)
-        .map(c => c.code)
-    );
+      if (coursesToPlace.length === 0) {
+        console.warn('Unable to place remaining courses:', remainingCourses);
+        break;
+      }
 
-    return course.prerequisites.every(prereq => completedCourses.has(prereq.courseId));
-  }
-
-  private balanceWorkload(years: AcademicYear[]): void {
-    let balanced = false;
-    const attempts = 0;
-    const MAX_ATTEMPTS = 5;
-
-    while (!balanced && attempts < MAX_ATTEMPTS) {
-      balanced = true;
-
-      years.forEach(year => {
-        year.semesters.forEach(semester => {
-          const credits = semester.courses.reduce((sum, c) => sum + c.credits, 0);
-          
-          if (credits < this.MIN_CREDITS_PER_SEMESTER || 
-              credits > this.MAX_CREDITS_PER_SEMESTER) {
-            balanced = false;
-            this.rebalanceSemester(semester, years);
-          }
-        });
-      });
-    }
-  }
-
-  private rebalanceSemester(semester: Semester, years: AcademicYear[]): void {
-    const currentCredits = semester.courses.reduce((sum, c) => sum + c.credits, 0);
-    
-    if (currentCredits > this.MAX_CREDITS_PER_SEMESTER) {
-      // 과목 이동 시도
-      const coursesToMove = semester.courses
-        .filter(course => {
-          const node = this.COURSE_GRAPH.get(course.id);
-          return node && node.dependents.size === 0; // 후속 과목이 없는 과목 우선
-        })
-        .sort((a, b) => a.credits - b.credits);
-
-      for (const course of coursesToMove) {
-        const targetSemester = this.findBestSemesterForMove(course, years, semester);
-        if (targetSemester) {
-          semester.courses = semester.courses.filter(c => c.id !== course.id);
-          targetSemester.courses.push(course);
-          break;
+      for (const course of coursesToPlace) {
+        const bestSemester = this.findBestSemester(course, semesters, completedCourses);
+        if (bestSemester) {
+          bestSemester.courses.push(course);
+          completedCourses.push(course);
+          remainingCourses.splice(remainingCourses.indexOf(course), 1);
         }
       }
     }
   }
 
-  private findBestSemesterForMove(
+  private canTakeCourse(
+    course: Course, 
+    completedCourses: Course[],
+    constraints: PlanConstraints
+  ): boolean {
+    // 선수과목 검사
+    return course.prerequisites.every(prereq =>
+      completedCourses.some(completed => completed.code === prereq.courseId)
+    );
+  }
+
+  private findBestSemester(
     course: Course,
-    years: AcademicYear[],
-    currentSemester: Semester
+    semesters: Semester[],
+    completedCourses: Course[]
   ): Semester | null {
-    return years
-      .flatMap(y => y.semesters)
-      .filter(s => s.id !== currentSemester.id)
-      .filter(s => this.canPlaceCourse(course, s, years, {
-        maxCreditsPerSemester: this.MAX_CREDITS_PER_SEMESTER,
-        requiredCourses: [],
-        preferredTerms: {}
-      }))
+    return semesters
+      .filter(semester => {
+        // 1. 학기 제공 여부
+        if (!course.term.includes(semester.term)) return false;
+
+        // 2. 학점 제한
+        const currentCredits = this.calculateSemesterCredits(semester);
+        if (currentCredits + course.credits > this.MAX_CREDITS) return false;
+
+        // 3. 선수과목 이수 여부
+        return this.canTakeCourse(course, completedCourses, {
+          maxCreditsPerSemester: this.MAX_CREDITS,
+          requiredCourses: [],
+          preferredTerms: {}
+        });
+      })
       .sort((a, b) => {
-        const creditsA = a.courses.reduce((sum, c) => sum + c.credits, 0);
-        const creditsB = b.courses.reduce((sum, c) => sum + c.credits, 0);
-        return creditsA - creditsB;
+        // 최적의 학기 선택 (학점 밸런스 고려)
+        const creditsA = this.calculateSemesterCredits(a);
+        const creditsB = this.calculateSemesterCredits(b);
+        const diffA = Math.abs(this.TARGET_CREDITS - (creditsA + course.credits));
+        const diffB = Math.abs(this.TARGET_CREDITS - (creditsB + course.credits));
+        return diffA - diffB;
       })[0] || null;
+  }
+
+  private balanceWorkload(semesters: Semester[]): void {
+    let balanced = false;
+    const maxIterations = 10;
+    let iterations = 0;
+
+    while (!balanced && iterations < maxIterations) {
+      balanced = true;
+      iterations++;
+
+      for (let i = 0; i < semesters.length - 1; i++) {
+        const currentCredits = this.calculateSemesterCredits(semesters[i]);
+        const nextCredits = this.calculateSemesterCredits(semesters[i + 1]);
+        const diff = currentCredits - nextCredits;
+
+        if (Math.abs(diff) > 3) {
+          this.balanceSemesters(semesters[i], semesters[i + 1]);
+          balanced = false;
+        }
+      }
+    }
+  }
+
+  private balanceSemesters(semesterA: Semester, semesterB: Semester): void {
+    const creditsA = this.calculateSemesterCredits(semesterA);
+    const creditsB = this.calculateSemesterCredits(semesterB);
+
+    if (Math.abs(creditsA - creditsB) <= 3) return;
+
+    if (creditsA > creditsB) {
+      // 과목 이동 시도
+      for (const course of semesterA.courses) {
+        if (this.canMoveCourse(course, semesterB)) {
+          this.moveCourse(course, semesterA, semesterB);
+          return;
+        }
+      }
+    } else {
+      // 반대 방향 이동
+      for (const course of semesterB.courses) {
+        if (this.canMoveCourse(course, semesterA)) {
+          this.moveCourse(course, semesterB, semesterA);
+          return;
+        }
+      }
+    }
+  }
+
+  private canMoveCourse(course: Course, targetSemester: Semester): boolean {
+    // 1. 학기 제공 여부
+    if (!course.term.includes(targetSemester.term)) return false;
+
+    // 2. 학점 제한
+    const targetCredits = this.calculateSemesterCredits(targetSemester);
+    if (targetCredits + course.credits > this.MAX_CREDITS) return false;
+
+    return true;
+  }
+
+  private moveCourse(course: Course, fromSemester: Semester, toSemester: Semester): void {
+    fromSemester.courses = fromSemester.courses.filter(c => c.id !== course.id);
+    toSemester.courses.push(course);
+  }
+
+  private calculateSemesterCredits(semester: Semester): number {
+    return semester.courses.reduce((sum, course) => sum + course.credits, 0);
   }
 
   private initializeYears(): AcademicYear[] {
     const startYear = new Date().getFullYear();
-    return ['Freshman', 'Sophomore', 'Junior', 'Senior'].map((yearName, index) => ({
+    const yearNames = ['Freshman', 'Sophomore', 'Junior', 'Senior'];
+    
+    return yearNames.map((name, index) => ({
       id: `year-${index}`,
-      name: yearName,
-      yearName: yearName,
-      year: `${yearName} Year (${startYear + index}-${startYear + index + 1})`,
+      name,
+      yearName: name,
+      year: `${name} Year`,
       startYear: startYear + index,
       semesters: ['Fall', 'Spring', 'Summer'].map(term => ({
-        id: `${yearName.toLowerCase()}-${term.toLowerCase()}`,
+        id: `${name.toLowerCase()}-${term.toLowerCase()}`,
         term,
         year: startYear + index,
         courses: [],
         academicYearId: `year-${index}`
       }))
     }));
+  }
+
+  private checkCircularDependencies(courses: Course[]): boolean {
+    const visited = new Set<string>();
+    const recStack = new Set<string>();
+
+    const dfs = (courseId: string): boolean => {
+      if (recStack.has(courseId)) return true;
+      if (visited.has(courseId)) return false;
+
+      visited.add(courseId);
+      recStack.add(courseId);
+
+      const course = courses.find(c => c.id === courseId);
+      if (course) {
+        for (const prereq of course.prerequisites) {
+          if (dfs(prereq.courseId)) return true;
+        }
+      }
+
+      recStack.delete(courseId);
+      return false;
+    };
+
+    return courses.some(course => dfs(course.id));
+  }
+
+  private flattenSemesters(years: AcademicYear[]): Semester[] {
+    return years.flatMap(year => year.semesters);
   }
 }
