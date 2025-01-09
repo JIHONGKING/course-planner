@@ -1,72 +1,91 @@
 // src/components/course/CourseSearchResults.tsx
 import React from 'react';
-import type { Course, GradeDistribution } from '@/types/course';
+import { AlertCircle } from 'lucide-react';
+import type { Course } from '@/types/course';
+import type { SortOption, SortOrder } from '@/utils/sortUtils';
+import CourseCard from '@/components/common/CourseCard';
+import { Pagination } from '@/components/ui/Pagination';
+import { SortControls } from '@/components/ui/SortControls';
 
 interface CourseSearchResultsProps {
   courses: Course[];
-  isLoading: boolean;
-  error?: string;
+  loading: boolean;
+  error?: string | null;
+  currentPage: number;
+  totalPages: number;
+  sortBy: SortOption;
+  sortOrder: SortOrder;
+  onSort?: (sortBy: SortOption) => void;
+  onOrderChange?: () => void;
+  onPageChange?: (page: number) => void;
 }
 
-const getGradeA = (gradeDistribution: string | GradeDistribution): string => {
-  if (typeof gradeDistribution === 'string') {
-    try {
-      const parsed = JSON.parse(gradeDistribution);
-      return parsed.A.toString();
-    } catch {
-      return '0';
-    }
-  }
-  return gradeDistribution.A.toString();
-};
 
-export default function CourseSearchResults({ courses, isLoading, error }: CourseSearchResultsProps) {
-  if (isLoading) {
+
+export default function CourseSearchResults({
+  courses,
+  loading,
+  error,
+  currentPage,
+  totalPages,
+  sortBy,
+  sortOrder,
+  onSort,
+  onOrderChange,
+  onPageChange
+}: CourseSearchResultsProps) {
+  if (loading) {
     return (
       <div className="flex justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-red-500 text-center py-4">
-        {error}
+      <div className="flex items-center justify-center py-8 text-red-500">
+        <AlertCircle className="h-5 w-5 mr-2" />
+        <span>{error}</span>
       </div>
     );
   }
 
   if (courses.length === 0) {
     return (
-      <div className="text-gray-500 text-center py-8">
-        No courses found. Try adjusting your search.
+      <div className="text-center py-8 text-gray-500">
+        검색 결과가 없습니다
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {courses.map((course) => (
-        <div 
-          key={course.id}
-          className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex justify-between">
-            <div>
-              <h3 className="font-medium text-gray-900">{course.code}</h3>
-              <p className="text-gray-600">{course.name}</p>
-              <p className="text-sm text-gray-500 mt-1">{course.description}</p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-medium">{course.credits} credits</div>
-              <div className="text-sm text-green-600">
-              A: {getGradeA(course.gradeDistribution)}%
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-gray-500">
+          총 {courses.length}개의 과목
+        </p>
+        {onSort && <SortControls
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={onSort}
+          onOrderChange={onOrderChange || (() => {})}  // 기본 빈 함수 제공
+          />}
+      </div>
+
+      <div className="space-y-2">
+        {courses.map(course => (
+          <CourseCard key={course.id} course={course} />
+        ))}
+      </div>
+
+      {onPageChange && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+        />
+      )}
     </div>
   );
 }

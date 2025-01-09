@@ -1,10 +1,12 @@
 // prisma/seed.ts
+
 import { PrismaClient } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 interface CourseInput {
+  id?: string;
   code: string;
   name: string;
   description: string;
@@ -24,11 +26,13 @@ interface CourseInput {
   };
 }
 
+// 샘플 코스 데이터
 const courses: CourseInput[] = [
   {
+    id: 'course-1',
     code: 'COMP SCI 300',
     name: 'Programming II',
-    description: 'Introduction to Object-Oriented Programming',
+    description: 'Introduction to Object-Oriented Programming using Java.',
     credits: 3.0,
     department: 'COMP SCI',
     level: '300',
@@ -105,26 +109,50 @@ const courses: CourseInput[] = [
 
 async function main() {
   try {
+    console.log('Starting to seed...');
+
     // 기존 데이터 삭제
+    await prisma.courseSchedules.deleteMany();
     await prisma.course.deleteMany();
-    console.log('Cleared existing courses');
+    console.log('Cleared existing data');
 
     // 새로운 데이터 생성
     for (const course of courses) {
       const data: Prisma.CourseCreateInput = {
-        id: `seed-${course.code.replace(/\s+/g, '-')}`,
+        id: course.id || `seed-${course.code.replace(/\s+/g, '-')}`,
         ...course,
         gradeDistribution: JSON.stringify(course.gradeDistribution)
       };
 
-      await prisma.course.create({ data });
-      console.log(`Created course: ${course.code}`);
+      const createdCourse = await prisma.course.create({ data });
+      console.log(`Created course: ${createdCourse.code}`);
+
+      // 샘플 스케줄 추가
+      await prisma.courseSchedules.createMany({
+        data: [
+          {
+            courseId: createdCourse.id,
+            dayOfWeek: 'MON',
+            startTime: '09:00',
+            endTime: '09:50'
+          },
+          {
+            courseId: createdCourse.id,
+            dayOfWeek: 'WED',
+            startTime: '09:00',
+            endTime: '09:50'
+          }
+        ]
+      });
+      console.log(`Created schedules for ${createdCourse.code}`);
     }
 
-    console.log('\nSample courses have been seeded successfully');
+    console.log('\nSeeding completed successfully');
   } catch (error) {
-    console.error('Error seeding data:', error);
+    console.error('Error during seeding:', error);
     throw error;
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -132,7 +160,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });

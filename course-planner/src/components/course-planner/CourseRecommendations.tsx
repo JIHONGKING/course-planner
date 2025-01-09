@@ -3,10 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import { Wand2, ChevronDown, Star, Info, Filter } from 'lucide-react';
 import type { Course } from '@/types/course';
-import { PlanGenerator } from '@/lib/planGenerator';
+import CourseCard from '@/components/common/CourseCard';
+import { getGradeA } from '@/utils/gradeUtils';
 import { usePlanner } from '@/hooks/usePlanner';
 import { useCourseData } from '@/hooks/useCourseData';
-import CourseCard from '@/components/common/CourseCard';
 
 interface RecommendationPreferences {
   prioritizeGrades: boolean;
@@ -19,13 +19,13 @@ interface RecommendationPreferences {
 export default function CourseRecommendations() {
   const { academicPlan, saveCourse } = usePlanner();
   const { courses: allCourses, loading, error } = useCourseData();
-  
+
   const [preferences, setPreferences] = useState<RecommendationPreferences>({
     prioritizeGrades: true,
     balanceWorkload: true,
     includeMajorReqs: true,
     preferredTerms: ['Fall', 'Spring'],
-    maxCreditsPerTerm: 15
+    maxCreditsPerTerm: 15,
   });
 
   const [selectedTerm, setSelectedTerm] = useState<string>('Fall');
@@ -34,19 +34,8 @@ export default function CourseRecommendations() {
   // 추천 과목 계산
   const recommendations = useMemo(() => {
     if (!allCourses.length || loading) return [];
-    
-    // PlanGenerator 인스턴스 생성
-    const generator = new PlanGenerator();
-    
+
     try {
-      // 현재 학기에 적합한 과목 필터링
-      const currentSemester = academicPlan
-        .flatMap(year => year.semesters)
-        .find(sem => sem.term === selectedTerm);
-
-      if (!currentSemester) return [];
-
-      // 이미 수강한 과목 필터링
       const takenCourses = new Set(
         academicPlan
           .flatMap(year => year.semesters)
@@ -54,35 +43,20 @@ export default function CourseRecommendations() {
           .map(course => course.code)
       );
 
-      // 수강 가능한 과목 필터링
-      const availableCourses = allCourses.filter(course => 
-        !takenCourses.has(course.code) &&
-        course.term.includes(selectedTerm)
+      const availableCourses = allCourses.filter(
+        course =>
+          !takenCourses.has(course.code) &&
+          course.term.includes(selectedTerm)
       );
 
-      // 계획 생성
-      const plan = generator.generatePlan(
-        availableCourses,
-        {
-          prioritizeGrades: preferences.prioritizeGrades,
-          balanceWorkload: preferences.balanceWorkload,
-          includeRequirements: preferences.includeMajorReqs
-        },
-        {
-          maxCreditsPerSemester: preferences.maxCreditsPerTerm,
-          requiredCourses: [],
-          preferredTerms: {}
-        }
-      );
-
-      // 추천 과목 정렬 및 필터링
-      return plan.years[0].semesters[0].courses
+      return availableCourses
         .map(course => ({
           course,
-          reasons: generateRecommendationReasons(course, currentSemester)
+          score: calculateScore(course, preferences),
+          reasons: generateRecommendationReasons(course),
         }))
+        .sort((a, b) => b.score - a.score)
         .slice(0, 5);
-
     } catch (error) {
       console.error('Error generating recommendations:', error);
       return [];
@@ -90,33 +64,38 @@ export default function CourseRecommendations() {
   }, [allCourses, academicPlan, preferences, selectedTerm, loading]);
 
   // 추천 이유 생성
-  const generateRecommendationReasons = (course: Course, currentSemester: any) => {
+  const generateRecommendationReasons = (course: Course) => {
     const reasons: string[] = [];
 
-    // 높은 성적 분포
     if (preferences.prioritizeGrades) {
-      const gradeA = parseFloat(course.gradeDistribution.toString());
+      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
       if (gradeA > 80) {
         reasons.push('높은 A학점 비율');
       }
     }
 
-    // 워크로드 밸런스
     if (preferences.balanceWorkload) {
-      const currentCredits = currentSemester.courses.reduce(
-        (sum: number, c: Course) => sum + c.credits, 0
-      );
-      if (currentCredits + course.credits <= preferences.maxCreditsPerTerm) {
-        reasons.push('적절한 학점 배분');
-      }
+      reasons.push('적절한 학점 배분');
     }
 
-    // 전공 요건
     if (preferences.includeMajorReqs && course.prerequisites.length === 0) {
       reasons.push('선수과목 없음');
     }
 
     return reasons;
+  };
+
+  const calculateScore = (course: Course, prefs: RecommendationPreferences) => {
+    let score = 0;
+
+    const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+    score += gradeA;
+
+    if (!course.prerequisites?.length) {
+      score += 20;
+    }
+
+    return score;
   };
 
   if (error) {
@@ -133,7 +112,6 @@ export default function CourseRecommendations() {
   return (
     <div className="bg-white rounded-lg shadow-sm">
       <div className="p-6">
-        {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Wand2 className="h-5 w-5 text-blue-500" />
@@ -145,13 +123,14 @@ export default function CourseRecommendations() {
           >
             <Filter className="h-4 w-4" />
             <span>필터</span>
-            <ChevronDown className={`h-4 w-4 transform transition-transform ${
-              showFilters ? 'rotate-180' : ''
-            }`} />
+            <ChevronDown
+              className={`h-4 w-4 transform transition-transform ${
+                showFilters ? 'rotate-180' : ''
+              }`}
+            />
           </button>
         </div>
 
-        {/* 필터 패널 */}
         {showFilters && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -161,7 +140,7 @@ export default function CourseRecommendations() {
                 </label>
                 <select
                   value={selectedTerm}
-                  onChange={(e) => setSelectedTerm(e.target.value)}
+                  onChange={e => setSelectedTerm(e.target.value)}
                   className="w-full rounded-md border border-gray-300 shadow-sm px-3 py-2"
                 >
                   <option value="Fall">Fall</option>
@@ -175,10 +154,12 @@ export default function CourseRecommendations() {
                 </label>
                 <select
                   value={preferences.maxCreditsPerTerm}
-                  onChange={(e) => setPreferences(prev => ({
-                    ...prev,
-                    maxCreditsPerTerm: parseInt(e.target.value)
-                  }))}
+                  onChange={e =>
+                    setPreferences(prev => ({
+                      ...prev,
+                      maxCreditsPerTerm: parseInt(e.target.value),
+                    }))
+                  }
                   className="w-full rounded-md border border-gray-300 shadow-sm px-3 py-2"
                 >
                   <option value={12}>12 학점</option>
@@ -193,36 +174,40 @@ export default function CourseRecommendations() {
                 <input
                   type="checkbox"
                   checked={preferences.prioritizeGrades}
-                  onChange={(e) => setPreferences(prev => ({
-                    ...prev,
-                    prioritizeGrades: e.target.checked
-                  }))}
+                  onChange={e =>
+                    setPreferences(prev => ({
+                      ...prev,
+                      prioritizeGrades: e.target.checked,
+                    }))
+                  }
                   className="rounded border-gray-300 text-blue-600"
                 />
                 <span className="text-sm text-gray-600">높은 학점 우선</span>
               </label>
-
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={preferences.balanceWorkload}
-                  onChange={(e) => setPreferences(prev => ({
-                    ...prev,
-                    balanceWorkload: e.target.checked
-                  }))}
+                  onChange={e =>
+                    setPreferences(prev => ({
+                      ...prev,
+                      balanceWorkload: e.target.checked,
+                    }))
+                  }
                   className="rounded border-gray-300 text-blue-600"
                 />
                 <span className="text-sm text-gray-600">워크로드 균형</span>
               </label>
-
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={preferences.includeMajorReqs}
-                  onChange={(e) => setPreferences(prev => ({
-                    ...prev,
-                    includeMajorReqs: e.target.checked
-                  }))}
+                  onChange={e =>
+                    setPreferences(prev => ({
+                      ...prev,
+                      includeMajorReqs: e.target.checked,
+                    }))
+                  }
                   className="rounded border-gray-300 text-blue-600"
                 />
                 <span className="text-sm text-gray-600">전공 요건 포함</span>
@@ -231,14 +216,12 @@ export default function CourseRecommendations() {
           </div>
         )}
 
-        {/* 로딩 상태 */}
         {loading && (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
           </div>
         )}
 
-        {/* 추천 과목 목록 */}
         {!loading && (
           <div className="space-y-4">
             {recommendations.map(({ course, reasons }, index) => (

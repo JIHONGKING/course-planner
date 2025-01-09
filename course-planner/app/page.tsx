@@ -14,6 +14,8 @@ import SavedCourses from '@/components/course-planner/SavedCourses';
 import AcademicYear from '@/components/course-planner/AcademicYear';
 import GraduationRequirements from '@/components/course-planner/GraduationRequirements';
 import CourseRecommendations from '@/components/course-planner/CourseRecommendations';
+import SearchCourses from '@/components/course/SearchCourses';
+
 
 function isGradeDistribution(value: any): value is GradeDistribution {
   return value && typeof value === 'object' && 'A' in value;
@@ -79,14 +81,12 @@ export default function Home() {
       semesters: year.semesters.map(semester => {
         if (semester.id === fromSemesterId) {
           courseToMove = semester.courses.find(c => c.id === courseId);
-          console.log('Found course to move:', courseToMove);
           return {
             ...semester,
             courses: semester.courses.filter(c => c.id !== courseId)
           };
         }
         if (semester.id === toSemesterId && courseToMove) {
-          console.log('Adding course to new semester:', courseToMove);
           return {
             ...semester,
             courses: [...semester.courses, courseToMove]
@@ -96,7 +96,6 @@ export default function Home() {
       })
     }));
 
-    console.log('Updated plan:', updatedPlan);
     moveCourse(courseId, fromSemesterId, toSemesterId);
   };
 
@@ -162,6 +161,8 @@ export default function Home() {
       setSortOrder('desc');
     }
   };
+  // app/page.tsx (continued...)
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header Section */}
@@ -245,49 +246,41 @@ export default function Home() {
               </div>
             </div>
           </div>
+
           {/* Search Input */}
-          <div className="relative mb-4">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className={`h-5 w-5 ${loading ? 'text-blue-500' : 'text-gray-400'}`} />
+<div className="mb-4">
+  <SearchCourses />
+</div>
+
+          {/* Course Search Results */}
+          <div className="space-y-2">
+            {loading && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
               </div>
-              <input
-                type="text"
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search courses by name, number, or instructor"
-                className="w-full pl-10 pr-4 py-2 border rounded-md"
+            )}
+
+            {error && (
+              <div className="text-center py-8 text-red-500">
+                Failed to load courses. Please try again.
+              </div>
+            )}
+
+            {courses.map((course) => (
+              <CourseCard
+                key={course.id}
+                course={course}
+                onClick={() => handleCourseClick(course)}
+                showPrerequisites={true}
               />
-            </div>
-            {/* Course Search Results */}
-            <div className="space-y-2">
-              {loading && (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
-                </div>
-              )}
-
-              {error && (
-                <div className="text-center py-8 text-red-500">
-                  Failed to load courses. Please try again.
-                </div>
-              )}
-
-              {courses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  onClick={() => handleCourseClick(course)}
-                  showPrerequisites={true}
-                />
-              ))}
-            </div>
+            ))}
+          </div>
         </div>
       </div>
-
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-8">
             {/* Graduation Requirements */}

@@ -19,8 +19,8 @@ export function createError(
 
 export function createValidationError(
   message: string,
-  field?: string,
-  value?: any
+  field: string,
+  value: any
 ): ValidationError {
   return {
     code: ERROR_CODES.VALIDATION_ERROR,
@@ -48,26 +48,14 @@ export function createPrerequisiteError(
 
 export function handleAPIError(error: unknown): AppError {
   if (error instanceof Error) {
-    return createError('API_ERROR', error.message);
+    return createError(
+      'NETWORK_ERROR',
+      error.message
+    );
   }
   
-  if (typeof error === 'string') {
-    return createError('API_ERROR', error);
-  }
-  
-  return createError(
-    'API_ERROR',
-    'An unexpected error occurred',
-    'error',
-    { originalError: error }
-  );
-}
-
-export function handleNetworkError(error: unknown): AppError {
   return createError(
     'NETWORK_ERROR',
-    'Failed to connect to the server. Please check your internet connection.',
-    'error',
-    { originalError: error }
+    'Unknown API error'
   );
 }

@@ -190,7 +190,8 @@ export async function syncCoursesWithMadgrades() {
             updatedAt: savedCourse.updatedAt.toISOString(),
             gradeDistribution: typeof savedCourse.gradeDistribution === 'string'
               ? savedCourse.gradeDistribution
-              : JSON.stringify(savedCourse.gradeDistribution)
+              : JSON.stringify(savedCourse.gradeDistribution),
+            courseSchedules: []  // 이 줄을 추가
           };
 
           await syncPrerequisitesWithDatabase(appSavedCourse);
@@ -298,7 +299,7 @@ export async function searchCourses(query: string): Promise<MadgradesCourse[]> {
   }
 }
 
-export function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null): Course {
+function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null): Course {
   const deptCode = madgradesCourse.subjects[0]?.code;
   const gradeData = grades || {
     A: '45.2',
@@ -320,6 +321,7 @@ export function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: Gra
     level: String(Math.floor(madgradesCourse.number / 100) * 100),
     prerequisites: [],
     term: ['Fall', 'Spring'],
-    gradeDistribution: JSON.stringify(gradeData)
+    gradeDistribution: JSON.stringify(gradeData),
+    courseSchedules: []  // 빈 배열로 초기화
   };
 }

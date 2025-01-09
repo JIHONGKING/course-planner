@@ -1,3 +1,4 @@
+// src/components/ui/SortControls.tsx
 import { ArrowUpDown } from 'lucide-react';
 import type { SortOption, SortOrder } from '@/utils/sortUtils';
 
@@ -5,8 +6,15 @@ interface SortControlsProps {
   sortBy: SortOption;
   sortOrder: SortOrder;
   onSortChange: (value: SortOption) => void;
-  onOrderChange: () => void;
+  onOrderChange?: () => void;
 }
+
+export interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
 
 export function SortControls({ 
   sortBy, 
@@ -28,7 +36,7 @@ export function SortControls({
         <option value="level">Course Level</option>
       </select>
 
-      {sortBy && (
+      {sortBy && onOrderChange && (
         <button
           onClick={onOrderChange}
           className="p-1.5 rounded-md hover:bg-gray-100 transition-colors

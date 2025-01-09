@@ -1,10 +1,10 @@
 // app/layout.tsx
 'use client';
 
-import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { ErrorProvider } from '@/context/ErrorContext';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -17,9 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <DndProvider backend={HTML5Backend}>
-          {children}
-        </DndProvider>
+        <ErrorProvider>
+          <DndProvider backend={HTML5Backend}>
+            {children}
+          </DndProvider>
+        </ErrorProvider>
       </body>
     </html>
   );

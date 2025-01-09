@@ -1,189 +1,125 @@
 // src/lib/courseRecommender.ts
+import type { Course } from '@/types/course';
+import { getGradeA } from '@/utils/gradeUtils';
 
-import type { Course, AcademicPlan } from '@/types/course';
-import type { GraduationRequirements } from '@/types/graduation';
-import { GraduationValidator } from '@/utils/graduationUtils';
-
-interface RecommendationCriteria {
-  prioritizeGrades?: boolean;    // 높은 학점 우선
-  balanceWorkload?: boolean;     // 워크로드 균형
-  preferredTerms?: string[];     // 선호 학기
-  maxCreditsPerTerm?: number;    // 학기당 최대 학점
-}
-
-interface CourseScore {
-  course: Course;
-  score: number;
-  reasons: string[];
+interface RecommendationOptions {
+  prioritizeGrades?: boolean;
+  balanceWorkload?: boolean;
+  includeRequirements?: boolean;
+  maxCreditsPerTerm?: number;
+  preferredTerms?: string[];
 }
 
 export class CourseRecommender {
-  private allCourses: Course[];
-  private plan: AcademicPlan;
-  private requirements: GraduationRequirements;
-  private validator: GraduationValidator;
+  private courses: Course[];
+  private completedCourses: Course[];
+  private currentTermCourses: Course[];
 
   constructor(
     courses: Course[],
-    plan: AcademicPlan,
-    requirements: GraduationRequirements
+    completedCourses: Course[] = [],
+    currentTermCourses: Course[] = []
   ) {
-    this.allCourses = courses;
-    this.plan = plan;
-    this.requirements = requirements;
-    this.validator = new GraduationValidator(plan, requirements, courses);
+    this.courses = courses;
+    this.completedCourses = completedCourses;
+    this.currentTermCourses = currentTermCourses;
   }
 
-  recommendCourses(criteria: RecommendationCriteria = {}): CourseScore[] {
-    const takenCourses = new Set(
-      this.plan.years.flatMap(y => 
-        y.semesters.flatMap(s => 
-          s.courses.map(c => c.code)
-        )
-      )
-    );
+  recommendCourses(options: RecommendationOptions = {}): Array<{
+    course: Course;
+    score: number;
+    reasons: string[];
+  }> {
+    const availableCourses = this.filterAvailableCourses(options);
+    
+    return availableCourses
+      .map(course => ({
+        course,
+        score: this.calculateScore(course, options),
+        reasons: this.generateReasons(course, options)
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5); // 상위 5개 추천
+  }
 
-    // 수강 가능한 과목 필터링
-    const availableCourses = this.allCourses.filter(course => {
+  private filterAvailableCourses(options: RecommendationOptions): Course[] {
+    return this.courses.filter(course => {
       // 이미 수강한 과목 제외
-      if (takenCourses.has(course.code)) return false;
+      if (this.completedCourses.some(c => c.id === course.id)) {
+        return false;
+      }
+
+      // 현재 수강 중인 과목 제외
+      if (this.currentTermCourses.some(c => c.id === course.id)) {
+        return false;
+      }
 
       // 선수과목 체크
-      const prerequisites = course.prerequisites.every(prereq =>
-        takenCourses.has(prereq.courseId)
+      const hasPrerequisites = course.prerequisites.every(prereq =>
+        this.completedCourses.some(c => c.code === prereq.courseId)
       );
 
       // 학기 제공 여부 체크
-      const termAvailable = !criteria.preferredTerms?.length ||
-        course.term.some(t => criteria.preferredTerms?.includes(t));
+      const termAvailable = !options.preferredTerms?.length ||
+        course.term.some(t => options.preferredTerms?.includes(t));
 
-      return prerequisites && termAvailable;
+      return hasPrerequisites && termAvailable;
     });
-
-    // 과목별 점수 계산
-    const scoredCourses = availableCourses.map(course => {
-      const score = this.calculateCourseScore(course, criteria);
-      const reasons = this.generateRecommendationReasons(course, criteria);
-      
-      return {
-        course,
-        score,
-        reasons
-      };
-    });
-
-    // 점수 기반 정렬
-    return scoredCourses.sort((a, b) => b.score - a.score);
   }
 
-  private calculateCourseScore(course: Course, criteria: RecommendationCriteria): number {
+  private calculateScore(course: Course, options: RecommendationOptions): number {
     let score = 0;
-    const reasons: string[] = [];
 
-    // 1. 졸업 요건 기여도
-    const requirementContribution = this.calculateRequirementContribution(course);
-    score += requirementContribution * 2;  // 가중치 2배
-
-    // 2. 성적 분포
-    if (criteria.prioritizeGrades) {
-      const gradeScore = this.calculateGradeScore(course);
-      score += gradeScore;
+    // 성적 분포 점수
+    if (options.prioritizeGrades) {
+      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+      score += gradeA * 2;
     }
 
-    // 3. 선수과목 관계
-    const prerequisiteScore = this.calculatePrerequisiteScore(course);
-    score += prerequisiteScore;
-
-    // 4. 워크로드 균형
-    if (criteria.balanceWorkload) {
-      const workloadScore = this.calculateWorkloadScore(course);
-      score += workloadScore;
+    // 워크로드 밸런스 점수
+    if (options.balanceWorkload) {
+      const currentCredits = this.currentTermCourses
+        .reduce((sum, c) => sum + c.credits, 0);
+      const targetCredits = options.maxCreditsPerTerm || 15;
+      const creditDiff = Math.abs(targetCredits - (currentCredits + course.credits));
+      score += (5 - creditDiff) * 2;
     }
+
+    // 선수과목 관계 점수
+    const isPrerequisiteFor = this.courses.filter(c =>
+      c.prerequisites.some(p => p.courseId === course.code)
+    ).length;
+    score += isPrerequisiteFor * 3;
 
     return score;
   }
 
-  private calculateRequirementContribution(course: Course): number {
-    let contribution = 0;
-
-    // 필수 과목 여부 확인
-    const isRequired = this.requirements.requirements.some(req => 
-      req.type === 'core' && 
-      req.courses.some(c => c.courseId === course.code)
-    );
-    if (isRequired) contribution += 5;
-
-    // 전공 과목 여부 확인
-    const isMajor = this.requirements.requirements.some(req =>
-      req.type === 'major' &&
-      (req.requiredCourses.some(c => c.courseId === course.code) ||
-       req.electiveCourses.includes(course.code))
-    );
-    if (isMajor) contribution += 3;
-
-    return contribution;
-  }
-
-  private calculateGradeScore(course: Course): number {
-    const distribution = typeof course.gradeDistribution === 'string'
-      ? JSON.parse(course.gradeDistribution)
-      : course.gradeDistribution;
-
-    // A 학점 비율을 기반으로 점수 계산
-    return parseFloat(distribution.A) / 20;  // 0-5 점 범위로 정규화
-  }
-
-  private calculatePrerequisiteScore(course: Course): number {
-    // 이 과목이 다른 과목의 선수과목인 경우 가중치 부여
-    const isPrerequisiteFor = this.allCourses.filter(c =>
-      c.prerequisites.some(p => p.courseId === course.code)
-    ).length;
-
-    return isPrerequisiteFor * 0.5;  // 각 후속 과목당 0.5점
-  }
-
-  private calculateWorkloadScore(course: Course): number {
-    // 현재 학기의 총 학점
-    const currentTermCredits = this.getCurrentTermCredits();
-    
-    // 적정 학점(15)에서 얼마나 벗어났는지 계산
-    const creditDiff = Math.abs(15 - (currentTermCredits + course.credits));
-    
-    // 차이가 적을수록 높은 점수
-    return 5 - creditDiff * 0.5;  // 최대 5점
-  }
-
-  private getCurrentTermCredits(): number {
-    // 현재 학기의 총 학점 계산 로직
-    return 0; // TODO: 실제 구현 필요
-  }
-
-  private generateRecommendationReasons(course: Course, criteria: RecommendationCriteria): string[] {
+  private generateReasons(course: Course, options: RecommendationOptions): string[] {
     const reasons: string[] = [];
 
-    // 졸업 요건 관련 이유
-    if (this.requirements.requirements.some(req => 
-      req.type === 'core' && 
-      req.courses.some(c => c.courseId === course.code)
-    )) {
-      reasons.push('필수 과목입니다');
+    // 성적 관련 이유
+    if (options.prioritizeGrades) {
+      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+      if (gradeA > 80) {
+        reasons.push('높은 A학점 비율');
+      }
     }
 
-    // 성적 분포 관련 이유
-    if (criteria.prioritizeGrades) {
-      const gradeScore = this.calculateGradeScore(course);
-      if (gradeScore > 4) {
-        reasons.push('A학점 비율이 높은 과목입니다');
+    // 워크로드 관련 이유
+    if (options.balanceWorkload) {
+      const currentCredits = this.currentTermCourses
+        .reduce((sum, c) => sum + c.credits, 0);
+      if (currentCredits + course.credits <= (options.maxCreditsPerTerm || 15)) {
+        reasons.push('적절한 학점 배분');
       }
     }
 
     // 선수과목 관련 이유
-    const prerequisiteCount = this.allCourses.filter(c =>
+    const prerequisiteFor = this.courses.filter(c =>
       c.prerequisites.some(p => p.courseId === course.code)
-    ).length;
-    
-    if (prerequisiteCount > 0) {
-      reasons.push(`${prerequisiteCount}개 과목의 선수과목입니다`);
+    );
+    if (prerequisiteFor.length > 0) {
+      reasons.push(`${prerequisiteFor.length}개 과목의 선수과목`);
     }
 
     return reasons;

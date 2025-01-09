@@ -3,8 +3,9 @@
 import type { Course } from '@/types/course';
 import { getGradeA } from './gradeUtils';
 
-export type SortOption = 'grade' | 'credits' | 'code' | 'level';
+export type SortOption = 'grade' | 'credits' | 'code' | 'level' | 'name';
 export type SortOrder = 'asc' | 'desc';
+
 
 export function sortCourses(courses: Course[], sortBy: SortOption, order: SortOrder = 'desc'): Course[] {
   const sorted = [...courses].sort((a, b) => {

@@ -2,13 +2,14 @@
   "name": "course-planner",
   "version": "0.1.0",
   "private": true,
+
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "sync": "ts-node -P tsconfig.json scripts/sync-courses.ts",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",

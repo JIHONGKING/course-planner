@@ -10,12 +10,18 @@ export interface GradeDistribution {
   F: string;
 }
 
-export interface FilterOptions {
-  level: string;
-  term: string;
-  department: string;
-  credits: string;
-  requirements: string[];
+export interface CourseSchedule {
+  id?: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  courseId?: string;
+}
+
+export interface Prerequisite {
+  courseId: string;
+  type: 'required' | 'concurrent' | 'recommended';
+  grade?: string;
 }
 
 export interface Course {
@@ -29,36 +35,17 @@ export interface Course {
   prerequisites: Prerequisite[];
   term: string[];
   gradeDistribution: string | GradeDistribution;
+  courseSchedules: CourseSchedule[];  // Add this field
   createdAt?: string;
-  semesterId?: string;  // 추가
   updatedAt?: string;
+  semesterId?: string;  // Optional field for when course is part of a semester
 }
 
-export interface Prerequisite {
-  courseId: string;
-  type: 'required' | 'concurrent' | 'recommended';
-  grade?: string;
+export interface Schedule {
+  dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
+  startTime: string;  // HH:mm format
+  endTime: string;    // HH:mm format
 }
-
-export interface PrerequisiteValidation {
-  isValid: boolean;
-  missingPrerequisites: Prerequisite[];
-  message: string;
-}
-
-export interface SemesterCourse extends Course {
-  semesterId: string;
-}
-
-
-export interface Semester {
-  id: string;
-  year: number;
-  term: string;
-  courses: Course[];
-  academicYearId: string;
-}
-
 
 export interface AcademicYear {
   id: string;
@@ -69,17 +56,19 @@ export interface AcademicYear {
   semesters: Semester[];
 }
 
+export interface Semester {
+  id: string;
+  term: string;
+  year: number;
+  academicYearId: string;
+  courses: Course[];
+}
+
 export interface AcademicPlan {
   id: string;
   userId: string;
   years: AcademicYear[];
   savedCourses: Course[];
-}
-
-export interface PlanningPreferences {
-  prioritizeGrades: boolean;
-  balanceWorkload: boolean;
-  includeRequirements: boolean;
 }
 
 export type ClassStanding = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';
@@ -90,4 +79,13 @@ export interface UserPreferences {
   classStanding: string;
   graduationYear: string;
   planningStrategy: 'GPA' | 'Workload' | 'Balance';
+}
+
+export interface ScheduleConflict {
+  course1: Course;
+  course2: Course;
+  overlappingSlots: {
+    slot1: CourseSchedule;
+    slot2: CourseSchedule;
+  };
 }

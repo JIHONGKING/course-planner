@@ -1,197 +1,146 @@
 // app/api/courses/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import type { Course } from '@/types/course';
+import type { Course, GradeDistribution } from '@/types/course';
 import type { Prisma } from '@prisma/client';
+import { searchMadgradesCourses, getGradeDistribution } from '@/lib/madgrades';
 
-const MADGRADES_API_TOKEN = process.env.MADGRADES_API_TOKEN;
-
-function convertToPrismaData(course: Course): Prisma.CourseCreateInput {
-  return {
-    ...course,
-    gradeDistribution: typeof course.gradeDistribution === 'string' 
-      ? course.gradeDistribution 
-      : JSON.stringify(course.gradeDistribution),
-    term: course.term,
-    prerequisites: course.prerequisites
-  };
-}
-
-async function searchMadgradesCourses(query: string) {
-  try {
-    const response = await fetch(
-      `https://api.madgrades.com/v1/courses?query=${encodeURIComponent(query)}`,
-      {
-        headers: {
-          'Authorization': `Token token=${MADGRADES_API_TOKEN}`,
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch from Madgrades API');
-    }
-
-    const data = await response.json();
-    return data.results;
-  } catch (error) {
-    console.error('Error searching Madgrades courses:', error);
-    return [];
-  }
-}
-
-async function getGradeDistribution(courseUuid: string) {
-  try {
-    const response = await fetch(
-      `https://api.madgrades.com/v1/courses/${courseUuid}/grades`,
-      {
-        headers: {
-          'Authorization': `Token token=${MADGRADES_API_TOKEN}`,
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const latestTerm = Math.max(...data.courseOfferings.map((o: any) => o.termCode));
-    const latestOffering = data.courseOfferings.find((o: any) => o.termCode === latestTerm);
-
-    if (!latestOffering?.cumulative) return null;
-
-    const total = latestOffering.cumulative.total;
-    if (total === 0) return null;
-
-    return {
-      A: (latestOffering.cumulative.aCount / total * 100).toFixed(1),
-      AB: (latestOffering.cumulative.abCount / total * 100).toFixed(1),
-      B: (latestOffering.cumulative.bCount / total * 100).toFixed(1),
-      BC: (latestOffering.cumulative.bcCount / total * 100).toFixed(1),
-      C: (latestOffering.cumulative.cCount / total * 100).toFixed(1),
-      D: (latestOffering.cumulative.dCount / total * 100).toFixed(1),
-      F: (latestOffering.cumulative.fCount / total * 100).toFixed(1)
-    };
-  } catch (error) {
-    console.error('Error fetching grade distribution:', error);
-    return null;
-  }
+interface SearchOptions {
+  query?: string;
+  department?: string;
+  level?: string;
+  term?: string;
+  page: number;
+  limit: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('query');
-    const level = searchParams.get('level');
-    const term = searchParams.get('term');
-    const department = searchParams.get('department');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-
-    // Prisma query conditions
-    const where: Prisma.CourseWhereInput = {
-      AND: [
-        query ? {
-          OR: [
-            { code: { contains: query, mode: 'insensitive' } },
-            { name: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
-          ],
-        } : {},
-        level ? { level } : {},
-        term ? { term: { has: term } } : {},
-        department ? { department } : {},
-      ],
+    const options: SearchOptions = {
+      query: searchParams.get('query') || undefined,
+      department: searchParams.get('department') || undefined,
+      level: searchParams.get('level') || undefined,
+      term: searchParams.get('term') || undefined,
+      page: parseInt(searchParams.get('page') || '1'),
+      limit: parseInt(searchParams.get('limit') || '20'),
+      sortBy: searchParams.get('sortBy') || undefined,
+      sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
     };
 
-    // First try to find courses in our database
+
+    // 1. 로컬 DB 검색
+    const whereClause: Prisma.CourseWhereInput = {
+      AND: [
+        options.query ? {
+          OR: [
+            { code: { contains: options.query, mode: 'insensitive' } },
+            { name: { contains: options.query, mode: 'insensitive' } },
+            { description: { contains: options.query, mode: 'insensitive' } }
+          ]
+        } : {},
+        options.department ? { department: options.department } : {},
+        options.level ? { level: options.level } : {},
+        options.term ? { term: { has: options.term } } : {}
+      ]
+    };
+
+    const skip = (options.page - 1) * options.limit;
+
+    // sortBy가 'grade'인 경우 gradeDistribution으로 변경
+    let orderBy: Prisma.CourseOrderByWithRelationInput = {};
+    if (options.sortBy === 'grade') {
+      orderBy = { gradeDistribution: options.sortOrder };
+    } else if (options.sortBy) {
+      orderBy = { [options.sortBy]: options.sortOrder };
+    }
+    
     const [dbCourses, total] = await Promise.all([
       prisma.course.findMany({
-        where,
-        take: limit,
-        skip: (page - 1) * limit,
-        orderBy: { code: 'asc' },
+        where: whereClause,
+        take: options.limit,
+        skip,
+        orderBy,
+        include: {
+          courseSchedules: true
+        }
       }),
-      prisma.course.count({ where })
+      prisma.course.count({ where: whereClause })
     ]);
 
-    // If we find results in our database, return them
     if (dbCourses.length > 0) {
       return NextResponse.json({
         courses: dbCourses,
         total,
-        page,
-        hasMore: total > page * limit,
+        page: options.page,
+        totalPages: Math.ceil(total / options.limit),
         source: 'database'
       });
     }
 
-    // If no results in database and we have a query, search Madgrades API
-    if (query) {
-      const madgradesCourses = await searchMadgradesCourses(query);
-      const coursesWithGrades = await Promise.all(
-        madgradesCourses.slice(0, 5).map(async (course: any) => {
-          const grades = await getGradeDistribution(course.uuid);
-          const courseData: Course = {
-            id: course.uuid,
-            code: course.code,
-            name: course.name,
-            description: course.description || 'No description available',
-            credits: 3,
-            department: course.subjects?.[0]?.code || 'UNKNOWN',
-            level: String(Math.floor(Number(course.number) / 100) * 100),
-            prerequisites: [] as string[],
-            term: ['Fall', 'Spring'] as string[],
-            gradeDistribution: grades ? JSON.stringify(grades) : JSON.stringify({
-              A: '45.2',
-              AB: '30.1',
-              B: '15.3',
-              BC: '5.2',
-              C: '2.1',
-              D: '1.1',
-              F: '1.0'
-            })
-          };
+    // 2. Madgrades API 검색
+    if (options.query) {
+      const madgradesCourses = await searchMadgradesCourses(options.query);
+      
+      if (madgradesCourses && madgradesCourses.length > 0) {
+        const processedCourses = await Promise.all(
+          madgradesCourses.slice(0, 5).map(async (madgradeCourse: any) => {
+            const grades = await getGradeDistribution(madgradeCourse.uuid);
+            
+            const courseData = {
+              id: madgradeCourse.uuid,
+              code: `${madgradeCourse.subjects[0]?.code} ${madgradeCourse.number}`,
+              name: madgradeCourse.name,
+              description: madgradeCourse.description || 'No description available',
+              credits: 3,
+              department: madgradeCourse.subjects[0]?.code || 'UNKNOWN',
+              level: String(Math.floor(Number(madgradeCourse.number) / 100) * 100),
+              prerequisites: [] as string[],
+              term: ['Fall', 'Spring'],
+              gradeDistribution: grades ? JSON.stringify(grades) : JSON.stringify({
+                A: '0', AB: '0', B: '0', BC: '0', C: '0', D: '0', F: '0'
+              })
+            };
 
-          // Save to database for future queries
-          try {
-            await prisma.course.create({
-              data: convertToPrismaData(courseData)
-            });
-          } catch (error) {
-            console.error('Failed to cache course:', error);
-          }
+            // DB에 캐싱
+            try {
+              await prisma.course.create({
+                data: {
+                  ...courseData
+                }
+              });
+            } catch (error) {
+              console.error('Failed to cache course:', error);
+            }
 
-          return courseData;
-        })
-      );
+            return courseData;
+          })
+        );
 
-      return NextResponse.json({
-        courses: coursesWithGrades,
-        total: coursesWithGrades.length,
-        page: 1,
-        hasMore: false,
-        source: 'madgrades'
-      });
+        return NextResponse.json({
+          courses: processedCourses,
+          total: processedCourses.length,
+          page: 1,
+          totalPages: 1,
+          source: 'madgrades'
+        });
+      }
     }
 
-    // Return empty results if no query and no database results
     return NextResponse.json({
       courses: [],
       total: 0,
       page: 1,
-      hasMore: false,
-      source: 'empty'
+      totalPages: 0,
+      source: 'none'
     });
 
   } catch (error) {
-    console.error('Failed to fetch courses:', error);
+    console.error('Course API error:', error);
     return NextResponse.json(
-      { 
-        error: 'Failed to fetch courses',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Failed to fetch courses', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

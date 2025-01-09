@@ -1,8 +1,12 @@
 // src/components/common/CourseCard.tsx
-import React from 'react';
-import { Info, Plus, X } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { Info, Plus, X, Clock } from 'lucide-react';
 import type { Course } from '@/types/course';
 import { getGradeA } from '@/utils/gradeUtils';
+import { Dialog } from '@headlessui/react';
+import CourseScheduleEditor from '../course-planner/CourseScheduleEditor';
+import { useCourseSchedule } from '@/hooks/useCourseSchedule';
 
 interface CourseCardProps {
   course: Course;
@@ -15,8 +19,8 @@ interface CourseCardProps {
   className?: string;
 }
 
- export default function CourseCard({
-  course, 
+export default function CourseCard({
+  course,
   onAdd,
   onRemove,
   onInfo,
@@ -25,114 +29,96 @@ interface CourseCardProps {
   isInPlan = false,
   className = ''
 }: CourseCardProps) {
-    console.log('Rendering CourseCard:', course.code);  // 디버그 로그 추가
-  const handleClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button')) {
-      return;
-    }
-    onClick?.();
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const { schedule, updateSchedule, isLoading, error } = useCourseSchedule({
+    courseId: course.id,
+    initialSchedule: course.schedule
+  });
+
+  // Schedule display helper
+  const formatScheduleDisplay = (schedule: Course['schedule']) => {
+    if (!schedule?.length) return null;
+
+    return schedule.map(slot => 
+      `${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`
+    ).join(', ');
   };
 
   return (
-    <div 
-      onClick={handleClick}
-      className={`group relative border border-gray-200 rounded-md p-4 
-                 ${onClick ? 'cursor-pointer' : ''} 
-                 hover:bg-gray-50 transition-colors
-                 ${className}`}
-    >
-      {/* 삭제 버튼 */}
-      {onRemove && (
+    <>
+      <div 
+        onClick={onClick}
+        className={`group relative border border-gray-200 rounded-md p-4 
+                   ${onClick ? 'cursor-pointer' : ''} 
+                   hover:bg-gray-50 transition-colors
+                   ${className}`}
+      >
+        {/* 기존 CourseCard 내용... */}
+        
+        {/* Schedule Section */}
+        {schedule && schedule.length > 0 && (
+          <div className="mt-2 text-sm text-gray-600">
+            <div className="flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              <span>{formatScheduleDisplay(schedule)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Schedule Edit Button */}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onRemove();
+            setIsScheduleModalOpen(true);
           }}
-          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 
-                   transition-opacity text-gray-400 hover:text-red-500"
+          className="mt-2 text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
         >
-          <X className="h-4 w-4" />
+          <Clock className="h-4 w-4" />
+          {schedule?.length ? 'Edit Schedule' : 'Add Schedule'}
         </button>
-      )}
-
-      <div className="flex justify-between pr-6">
-        <div>
-          {/* 과목 기본 정보 */}
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium text-gray-900">{course.code}</h3>
-            <span className="px-2 py-0.5 text-sm bg-gray-100 rounded-full text-gray-600">
-              {course.credits} credits
-            </span>
-          </div>
-          <p className="text-gray-600">{course.name}</p>
-          <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-            {course.description}
-          </p>
-
-          {/* 선수과목 정보 */}
-          {showPrerequisites && course.prerequisites.length > 0 && (
-            <div className="mt-2">
-              <div className="flex items-center gap-1 text-sm text-blue-600">
-                <Info className="w-4 h-4" />
-                <span>Prerequisites:</span>
-              </div>
-              <ul className="mt-1 space-y-1">
-                {course.prerequisites.map((prereq) => (
-                  <li key={prereq.courseId} className="text-sm text-gray-600 flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${
-                      prereq.type === 'required' ? 'bg-red-500' : 'bg-yellow-500'
-                    }`} />
-                    {prereq.courseId}
-                    {prereq.grade && (
-                      <span className="text-xs">({prereq.grade} or higher)</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {/* 성적 및 학기 정보 */}
-        <div className="text-right">
-          <div className="text-sm text-green-600 font-medium">
-            A: {getGradeA(course.gradeDistribution)}%
-          </div>
-          <div className="text-sm text-gray-500 mt-1">
-            {course.term.join(', ')}
-          </div>
-
-          {/* 액션 버튼들 */}
-          {(onAdd || onInfo) && (
-            <div className="mt-4 space-x-2">
-              {onInfo && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onInfo(course);
-                  }}
-                  className="p-1 text-gray-400 hover:text-gray-600"
-                  title="View course details"
-                >
-                  <Info className="h-5 w-5" />
-                </button>
-              )}
-              {onAdd && !isInPlan && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAdd(course);
-                  }}
-                  className="p-1 text-blue-500 hover:text-blue-600"
-                  title="Add to plan"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
       </div>
-    </div>
+
+      {/* Schedule Editor Modal */}
+      <Dialog
+        open={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="mx-auto max-w-md bg-white rounded-xl p-6">
+            <Dialog.Title className="text-lg font-medium mb-4">
+              Edit Course Schedule
+            </Dialog.Title>
+
+            <CourseScheduleEditor
+              schedule={schedule || []}
+              onChange={async (newSchedule) => {
+                try {
+                  await updateSchedule(newSchedule);
+                  setIsScheduleModalOpen(false);
+                } catch (err) {
+                  console.error('Failed to update schedule:', err);
+                }
+              }}
+            />
+
+            {error && (
+              <p className="mt-2 text-sm text-red-600">{error}</p>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
+    </>
   );
 }

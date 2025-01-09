@@ -1,4 +1,5 @@
 // src/components/ui/Pagination.tsx
+
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PaginationProps {
@@ -6,6 +7,7 @@ interface PaginationProps {
   totalPages: number;
   onPageChange: (page: number) => void;
 }
+
 
 export function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
   // 페이지 번호 계산
