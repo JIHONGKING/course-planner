@@ -1,4 +1,5 @@
 // src/components/course-planner/CourseList.tsx
+import React, { useMemo, useCallback } from 'react';
 import { useCourses } from '@/hooks/useCourses';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
@@ -6,7 +7,7 @@ import { SortControls } from '@/components/ui/SortControls';
 import { Pagination } from '@/components/ui/Pagination';
 import type { Course, GradeDistribution } from '@/types/course';
 
-export default function CourseList() {
+const CourseList = React.memo(() => {
   const {
     courses,
     loading,
@@ -15,12 +16,13 @@ export default function CourseList() {
     sortOrder,
     currentPage,
     totalPages,
-    handleSortChange,
-    toggleSortOrder,
+    handleSort,
+    handleOrderChange,
     handlePageChange
   } = useCourses();
 
-  const getGradeA = (gradeDistribution: string | GradeDistribution): number => {
+  // GradeA 계산 함수 메모이제이션
+  const getGradeA = useCallback((gradeDistribution: string | GradeDistribution): number => {
     if (typeof gradeDistribution === 'string') {
       try {
         return parseFloat(JSON.parse(gradeDistribution).A);
@@ -29,7 +31,16 @@ export default function CourseList() {
       }
     }
     return parseFloat(gradeDistribution.A.toString());
-  };
+  }, []);
+
+  // 과목 통계 메모이제이션
+  const stats = useMemo(() => ({
+    totalCourses: courses.length,
+    totalCredits: courses.reduce((sum, course) => sum + course.credits, 0),
+    averageGrade: courses.length > 0 
+      ? courses.reduce((sum, course) => sum + getGradeA(course.gradeDistribution), 0) / courses.length 
+      : 0
+  }), [courses, getGradeA]);
 
   if (loading) {
     return <LoadingState />;
@@ -43,20 +54,22 @@ export default function CourseList() {
     <div className="space-y-4">
       {courses.length > 0 && (
         <div className="flex justify-between items-center py-4">
-          <p className="text-sm text-gray-500">
-            Showing {courses.length} courses
-          </p>
+          <div className="text-sm text-gray-500">
+            <p>Showing {courses.length} courses</p>
+            <p>Total Credits: {stats.totalCredits}</p>
+            <p>Average A Grade: {stats.averageGrade.toFixed(1)}%</p>
+          </div>
           <SortControls
             sortBy={sortBy}
             sortOrder={sortOrder}
-            onSortChange={handleSortChange}
-            onOrderChange={toggleSortOrder}
+            onSortChange={handleSort}
+            onOrderChange={handleOrderChange}
           />
         </div>
       )}
 
       <div className="space-y-4">
-        {courses.map((course: Course) => (
+        {courses.map((course) => (
           <div
             key={course.id}
             className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors duration-200"
@@ -72,6 +85,18 @@ export default function CourseList() {
                 <p className="mt-1 text-gray-600">{course.name}</p>
                 {course.description && (
                   <p className="mt-1 text-sm text-gray-500">{course.description}</p>
+                )}
+                {course.courseSchedules && course.courseSchedules.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600 font-medium">Schedule:</p>
+                    <div className="space-y-1">
+                      {course.courseSchedules.map((schedule, index) => (
+                        <p key={index} className="text-sm text-gray-500">
+                          {schedule.dayOfWeek} {schedule.startTime}-{schedule.endTime}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="ml-4 text-right">
@@ -102,4 +127,8 @@ export default function CourseList() {
       )}
     </div>
   );
-}
+});
+
+CourseList.displayName = 'CourseList';
+
+export default CourseList;

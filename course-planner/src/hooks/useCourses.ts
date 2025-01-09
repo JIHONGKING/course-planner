@@ -2,85 +2,44 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Course } from '@/types/course';
 import type { SortOption, SortOrder } from '@/utils/sortUtils';
-import { useError } from '@/context/ErrorContext';
-import { useDebounce } from '@/hooks/useDebounce';
+import type { FilterOptions } from '@/components/ui/FilterSection';
 
-interface UseCoursesOptions {
-  initialQuery?: string;
-  autoSearch?: boolean;
-  debounceMs?: number;
-}
-
-interface FilterOptions {
-  department?: string;
-  level?: string;
-  term?: string;
-}
-
-const VALID_SORT_OPTIONS = {
-  gradeDistribution: 'grade',
-  code: 'code',
-  name: 'name',
-  credits: 'credits',
-  level: 'level'
-} as const;
-
-export function useCourses(options: UseCoursesOptions = {}) {
+export function useCourses(options: { autoSearch?: boolean } = {}) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState(options.initialQuery || '');
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('grade');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [filters, setFilters] = useState<FilterOptions>({});
-  
-  const debouncedSearchTerm = useDebounce(searchTerm, options.debounceMs || 300);
-  const { addError } = useError();
 
   const searchCourses = useCallback(async (query: string) => {
     if (!query.trim()) {
       setCourses([]);
       return;
     }
-
+    
     setLoading(true);
     setError(null);
 
     try {
-      const actualSortBy = sortBy === 'grade' ? 'gradeDistribution' : sortBy;
-      
-      const params = new URLSearchParams({
-        query,
-        page: String(currentPage),
-        sortBy: actualSortBy,
-        sortOrder,
-        ...filters
-      });
-
-      const response = await fetch(`/api/courses?${params}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch courses');
-      }
-
+      const response = await fetch(`/api/courses/search?query=${encodeURIComponent(query)}&page=${currentPage}&sortBy=${sortBy}&sortOrder=${sortOrder}`);
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to search courses');
+      }
+      
       setCourses(data.courses);
       setTotalPages(data.totalPages || 1);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to search courses';
-      setError(errorMessage);
-      addError({
-        code: 'SEARCH_ERROR',
-        message: errorMessage,
-        severity: 'error',
-        timestamp: Date.now()
-      });
+      setError(err instanceof Error ? err.message : 'Search failed');
       setCourses([]);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, sortBy, sortOrder, filters, addError]);
+  }, [currentPage, sortBy, sortOrder]);
 
   const handleSort = useCallback((newSortBy: SortOption) => {
     setSortBy(newSortBy);
@@ -96,25 +55,28 @@ export function useCourses(options: UseCoursesOptions = {}) {
     }
   }, [searchTerm, searchCourses]);
 
-  const handlePageChange = useCallback((newPage: number) => {
-    setCurrentPage(newPage);
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
     if (searchTerm) {
       searchCourses(searchTerm);
     }
   }, [searchTerm, searchCourses]);
 
-  const handleFilter = useCallback((newFilters: FilterOptions) => {
-    setFilters(newFilters);
+  const handleFilter = useCallback((filterOptions: FilterOptions) => {
+    // Note: FilterOptions will be passed to API when implemented
     if (searchTerm) {
       searchCourses(searchTerm);
     }
   }, [searchTerm, searchCourses]);
 
   useEffect(() => {
-    if (options.autoSearch && debouncedSearchTerm) {
-      searchCourses(debouncedSearchTerm);
+    if (options.autoSearch && searchTerm) {
+      const timer = setTimeout(() => {
+        searchCourses(searchTerm);
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, [debouncedSearchTerm, options.autoSearch, searchCourses]);
+  }, [searchTerm, options.autoSearch, searchCourses]);
 
   return {
     courses,
@@ -129,6 +91,7 @@ export function useCourses(options: UseCoursesOptions = {}) {
     handleSort,
     handleOrderChange,
     handlePageChange,
-    handleFilter
+    handleFilter,
+    searchCourses
   };
 }

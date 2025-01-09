@@ -7,6 +7,12 @@ interface FilterSectionProps {
  onFilterChange: (filterType: string, value: string) => void;
 }
 
+export interface FilterOptions {
+  department?: string;
+  level?: string;
+  term?: string;
+}
+
 export default function FilterSection({ onFilterChange }: FilterSectionProps) {
  const [isOpen, setIsOpen] = useState(false);
  const [activeFilters, setActiveFilters] = useState<{[key: string]: string}>({});

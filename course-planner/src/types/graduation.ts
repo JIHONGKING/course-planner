@@ -59,6 +59,9 @@ export interface CourseRequirement {
     minimumGPA: number;
     minimumMajorGPA?: number;
   }
+
+  export type RequirementType = 'credits' | 'core' | 'breadth' | 'major' | 'level' | 'gpa' | 'distribution';
+
   
   export type Requirement =
     | CreditRequirement
@@ -76,8 +79,9 @@ export interface CourseRequirement {
     required: number;
   }
   
+  
   export interface RequirementValidationResult {
-    type: Requirement['type'];
+    type: RequirementType;
     satisfied: boolean;
     current: number;
     required: number;
@@ -89,10 +93,13 @@ export interface CourseRequirement {
   
   // 전체 졸업 요건
   export interface GraduationRequirements {
-    major: string;
-    requirements: Requirement[];
-    concentrations?: {
+    totalCredits: number;
+    coreCourses: Array<{
+      code: string;
       name: string;
-      requirements: Requirement[];
-    }[];
+    }>;
+    minimumGPA: number;
+    distribution: {
+      [department: string]: number;
+    };
   }

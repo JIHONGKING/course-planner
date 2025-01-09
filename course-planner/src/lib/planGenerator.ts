@@ -1,5 +1,4 @@
 // src/lib/planGenerator.ts
-
 import type { Course, AcademicPlan, AcademicYear, Semester } from '@/types/course';
 import { getGradeA } from '@/utils/gradeUtils';
 import { validatePrerequisites } from '@/utils/prerequisiteUtils';
@@ -40,7 +39,7 @@ export class PlanGenerator {
     const completedCourses: Course[] = [];
 
     // 4. 과목 배치 (최적화된 알고리즘)
-    this.placeCourses(scoredCourses, semesters, completedCourses, constraints);
+    this.distributeCourses(scoredCourses, semesters, completedCourses, constraints);
 
     // 5. 워크로드 밸런싱
     if (preferences.balanceWorkload) {
@@ -55,73 +54,50 @@ export class PlanGenerator {
     };
   }
 
-  private calculateCourseScores(courses: Course[], preferences: PlanPreferences): Course[] {
-    return courses
-      .map(course => ({
-        course,
-        score: this.calculateScore(course, preferences)
-      }))
-      .sort((a, b) => b.score - a.score)
-      .map(({ course }) => course);
+  private calculateCourseScores(courses: Course[], preferences: PlanPreferences): [Course, number][] {
+    return courses.map(course => {
+      let score = 0;
+
+      // GPA 기반 점수
+      if (preferences.prioritizeGrades) {
+        const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+        score += gradeA * 2;
+      }
+
+      // 워크로드 기반 점수
+      score += (this.TARGET_CREDITS - Math.abs(this.TARGET_CREDITS - course.credits)) * 1.5;
+
+      // 선수과목 관계 점수
+      const prereqCount = course.prerequisites.length;
+      score -= prereqCount * 1.2; // 선수과목이 많을수록 먼저 배치되도록
+
+      return [course, score] as [Course, number];
+    }).sort((a, b) => b[1] - a[1]); // 높은 점수순 정렬
   }
 
-  private calculateScore(course: Course, preferences: PlanPreferences): number {
-    let score = 0;
-
-    // 1. 성적 기반 점수
-    if (preferences.prioritizeGrades) {
-      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
-      score += gradeA * 2;
-    }
-
-    // 2. 선수과목 가중치
-    const prerequisiteWeight = course.prerequisites.length * 5;
-    score += prerequisiteWeight;
-
-    // 3. 학점 기반 점수
-    score += course.credits * 3;
-
-    return score;
-  }
-
-  private placeCourses(
-    courses: Course[], 
-    semesters: Semester[], 
+  private distributeCourses(
+    scoredCourses: [Course, number][],
+    semesters: Semester[],
     completedCourses: Course[],
     constraints: PlanConstraints
   ): void {
-    const remainingCourses = [...courses];
+    const remainingCourses = new Set(scoredCourses.map(([course]) => course));
+    const maxCredits = constraints.maxCreditsPerSemester;
 
-    while (remainingCourses.length > 0) {
-      const coursesToPlace = remainingCourses.filter(course =>
-        this.canTakeCourse(course, completedCourses, constraints)
-      );
+    // Convert Map iteration to Array
+    Array.from(remainingCourses).forEach(course => {
+      if (!remainingCourses.has(course)) return;
 
-      if (coursesToPlace.length === 0) {
-        console.warn('Unable to place remaining courses:', remainingCourses);
-        break;
+      // 배치 가능한 가장 이른 학기 찾기
+      const bestSemester = this.findBestSemester(course, semesters, completedCourses);
+      if (bestSemester) {
+        bestSemester.courses.push(course);
+        completedCourses.push(course);
+        remainingCourses.delete(course);
+      } else {
+        console.warn(`Could not place course: ${course.code}`);
       }
-
-      for (const course of coursesToPlace) {
-        const bestSemester = this.findBestSemester(course, semesters, completedCourses);
-        if (bestSemester) {
-          bestSemester.courses.push(course);
-          completedCourses.push(course);
-          remainingCourses.splice(remainingCourses.indexOf(course), 1);
-        }
-      }
-    }
-  }
-
-  private canTakeCourse(
-    course: Course, 
-    completedCourses: Course[],
-    constraints: PlanConstraints
-  ): boolean {
-    // 선수과목 검사
-    return course.prerequisites.every(prereq =>
-      completedCourses.some(completed => completed.code === prereq.courseId)
-    );
+    });
   }
 
   private findBestSemester(
@@ -155,6 +131,17 @@ export class PlanGenerator {
       })[0] || null;
   }
 
+  private canTakeCourse(
+    course: Course, 
+    completedCourses: Course[],
+    constraints: PlanConstraints
+  ): boolean {
+    // 선수과목 검사
+    return course.prerequisites.every(prereq =>
+      completedCourses.some(completed => completed.code === prereq.courseId)
+    );
+  }
+
   private balanceWorkload(semesters: Semester[]): void {
     let balanced = false;
     const maxIterations = 10;
@@ -176,6 +163,22 @@ export class PlanGenerator {
       }
     }
   }
+
+  private moveCourse(course: Course, fromSemester: Semester, toSemester: Semester): void {
+    if (!this.canMoveCourse(course, toSemester)) {
+      return;
+    }
+  
+    // 기존 학기에서 과목 제거
+    const courseIndex = fromSemester.courses.findIndex(c => c.id === course.id);
+    if (courseIndex !== -1) {
+      fromSemester.courses.splice(courseIndex, 1);
+    }
+  
+    // 새 학기에 과목 추가
+    toSemester.courses.push(course);
+  }
+  
 
   private balanceSemesters(semesterA: Semester, semesterB: Semester): void {
     const creditsA = this.calculateSemesterCredits(semesterA);
@@ -211,11 +214,6 @@ export class PlanGenerator {
     if (targetCredits + course.credits > this.MAX_CREDITS) return false;
 
     return true;
-  }
-
-  private moveCourse(course: Course, fromSemester: Semester, toSemester: Semester): void {
-    fromSemester.courses = fromSemester.courses.filter(c => c.id !== course.id);
-    toSemester.courses.push(course);
   }
 
   private calculateSemesterCredits(semester: Semester): number {
