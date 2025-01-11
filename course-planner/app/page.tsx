@@ -37,7 +37,7 @@ export default function Home() {
   const [isPlanGenerated, setIsPlanGenerated] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('grade');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const { courses, loading, error, searchCourses } = useCourses();
+  const { courses, isLoading, error, searchCourses } = useCourses();
   const {
     savedCourses,
     selectedYear,
@@ -254,7 +254,7 @@ export default function Home() {
 
           {/* Course Search Results */}
           <div className="space-y-2">
-            {loading && (
+            {isLoading && (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto" />
               </div>

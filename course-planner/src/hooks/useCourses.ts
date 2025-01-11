@@ -1,4 +1,5 @@
 // src/hooks/useCourses.ts
+
 import { useState, useCallback, useEffect } from 'react';
 import type { Course } from '@/types/course';
 import type { SortOption, SortOrder } from '@/utils/sortUtils';
@@ -6,7 +7,7 @@ import type { FilterOptions } from '@/components/ui/FilterSection';
 
 export function useCourses(options: { autoSearch?: boolean } = {}) {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('grade');
@@ -20,11 +21,13 @@ export function useCourses(options: { autoSearch?: boolean } = {}) {
       return;
     }
     
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/courses/search?query=${encodeURIComponent(query)}&page=${currentPage}&sortBy=${sortBy}&sortOrder=${sortOrder}`);
+      const response = await fetch(
+        `/api/courses/search?query=${encodeURIComponent(query)}&page=${currentPage}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+      );
       const data = await response.json();
       
       if (!response.ok) {
@@ -37,7 +40,7 @@ export function useCourses(options: { autoSearch?: boolean } = {}) {
       setError(err instanceof Error ? err.message : 'Search failed');
       setCourses([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, [currentPage, sortBy, sortOrder]);
 
@@ -63,7 +66,7 @@ export function useCourses(options: { autoSearch?: boolean } = {}) {
   }, [searchTerm, searchCourses]);
 
   const handleFilter = useCallback((filterOptions: FilterOptions) => {
-    // Note: FilterOptions will be passed to API when implemented
+    // Implement filter logic here
     if (searchTerm) {
       searchCourses(searchTerm);
     }
@@ -80,7 +83,7 @@ export function useCourses(options: { autoSearch?: boolean } = {}) {
 
   return {
     courses,
-    loading,
+    isLoading,
     error,
     searchTerm,
     setSearchTerm,
@@ -89,9 +92,9 @@ export function useCourses(options: { autoSearch?: boolean } = {}) {
     currentPage,
     totalPages,
     handleSort,
-    handleOrderChange,
-    handlePageChange,
     handleFilter,
+    handlePageChange,
+    handleOrderChange,
     searchCourses
   };
 }

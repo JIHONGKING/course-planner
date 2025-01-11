@@ -31,7 +31,40 @@ export default function CourseRecommendations() {
   const [selectedTerm, setSelectedTerm] = useState<string>('Fall');
   const [showFilters, setShowFilters] = useState(false);
 
-  // 추천 과목 계산
+  const calculateScore = (course: Course, prefs: RecommendationPreferences) => {
+    let score = 0;
+
+    const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+    score += gradeA;
+
+    if (!course.prerequisites?.length) {
+      score += 20;
+    }
+
+    return score;
+  };
+
+  const generateRecommendationReasons = (course: Course) => {
+    const reasons: string[] = [];
+
+    if (preferences.prioritizeGrades) {
+      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
+      if (gradeA > 80) {
+        reasons.push('높은 A학점 비율');
+      }
+    }
+
+    if (preferences.balanceWorkload) {
+      reasons.push('적절한 학점 배분');
+    }
+
+    if (preferences.includeMajorReqs && course.prerequisites.length === 0) {
+      reasons.push('선수과목 없음');
+    }
+
+    return reasons;
+  };
+
   const recommendations = useMemo(() => {
     if (!allCourses.length || loading) return [];
 
@@ -62,41 +95,6 @@ export default function CourseRecommendations() {
       return [];
     }
   }, [allCourses, academicPlan, preferences, selectedTerm, loading]);
-
-  // 추천 이유 생성
-  const generateRecommendationReasons = (course: Course) => {
-    const reasons: string[] = [];
-
-    if (preferences.prioritizeGrades) {
-      const gradeA = parseFloat(getGradeA(course.gradeDistribution));
-      if (gradeA > 80) {
-        reasons.push('높은 A학점 비율');
-      }
-    }
-
-    if (preferences.balanceWorkload) {
-      reasons.push('적절한 학점 배분');
-    }
-
-    if (preferences.includeMajorReqs && course.prerequisites.length === 0) {
-      reasons.push('선수과목 없음');
-    }
-
-    return reasons;
-  };
-
-  const calculateScore = (course: Course, prefs: RecommendationPreferences) => {
-    let score = 0;
-
-    const gradeA = parseFloat(getGradeA(course.gradeDistribution));
-    score += gradeA;
-
-    if (!course.prerequisites?.length) {
-      score += 20;
-    }
-
-    return score;
-  };
 
   if (error) {
     return (

@@ -12,6 +12,18 @@ export const sampleCourses: Course[] = [
     level: '300',
     prerequisites: [],
     term: ['Fall', 'Spring'],
+    courseSchedules: [
+      {
+        dayOfWeek: 'MON',
+        startTime: '09:00',
+        endTime: '09:50',
+      },
+      {
+        dayOfWeek: 'WED',
+        startTime: '09:00',
+        endTime: '09:50',
+      }
+    ],
     gradeDistribution: JSON.stringify({
       A: 45.2,
       AB: 30.1,
@@ -44,6 +56,13 @@ export const generateMoreCourses = (): Course[] => {
         level: String(Math.floor(courseNumber / 100) * 100),
         prerequisites: [],
         term: ['Fall', 'Spring'],
+        courseSchedules: [
+          {
+            dayOfWeek: 'MON',
+            startTime: '09:00',
+            endTime: '09:50',
+          }
+        ],
         gradeDistribution: JSON.stringify({
           A: 40 + Math.random() * 20,
           AB: 25 + Math.random() * 15,

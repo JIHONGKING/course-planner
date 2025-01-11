@@ -10,9 +10,40 @@ export interface GradeDistribution {
   F: string;
 }
 
+export interface SemesterCourse extends Course {
+  semesterId: string;
+}
+
+export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
+
+export interface TimeSlot {
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+}
+
+export interface ScheduleConflict {
+  course1: Course;
+  course2: Course;
+  overlappingSlots: {
+    slot1: CourseSchedule;
+    slot2: CourseSchedule;
+  };
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  conflicts: ScheduleConflict[];
+}
+export interface Schedule {
+  dayOfWeek: DayOfWeek;
+  startTime: string;  // HH:mm format
+  endTime: string;    // HH:mm format
+}
+
 export interface CourseSchedule {
   id?: string;
-  dayOfWeek: string;
+  dayOfWeek: DayOfWeek;
   startTime: string;
   endTime: string;
   courseId?: string;
@@ -35,16 +66,10 @@ export interface Course {
   prerequisites: Prerequisite[];
   term: string[];
   gradeDistribution: string | GradeDistribution;
-  courseSchedules: CourseSchedule[];  // Add this field
+  courseSchedules: CourseSchedule[];  
   createdAt?: string;
   updatedAt?: string;
   semesterId?: string;  // Optional field for when course is part of a semester
-}
-
-export interface Schedule {
-  dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
-  startTime: string;  // HH:mm format
-  endTime: string;    // HH:mm format
 }
 
 export interface AcademicYear {

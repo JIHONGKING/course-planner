@@ -1,12 +1,13 @@
 // src/components/ui/SearchBar.tsx
+// src/components/ui/SearchBar.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
-import { useCourses } from '../../hooks/useCourses';
+import { useCourses } from '@/hooks/useCourses';
 import debounce from 'lodash/debounce';
 
 export default function SearchBar() {
   const [searchTerm, setSearchTerm] = useState('');
-  const { searchCourses, loading } = useCourses();
+  const { searchCourses, isLoading } = useCourses();
 
   // 디바운스된 검색 함수 생성
   const debouncedSearch = useCallback(
@@ -35,7 +36,7 @@ export default function SearchBar() {
   return (
     <div className="relative">
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-        <Search className={`h-5 w-5 ${loading ? 'text-blue-500' : 'text-gray-400'}`} />
+        <Search className={`h-5 w-5 ${isLoading ? 'text-blue-500' : 'text-gray-400'}`} />
       </div>
       <input
         type="text"

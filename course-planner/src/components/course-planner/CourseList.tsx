@@ -10,7 +10,7 @@ import type { Course, GradeDistribution } from '@/types/course';
 const CourseList = React.memo(() => {
   const {
     courses,
-    loading,
+    isLoading,
     error,
     sortBy,
     sortOrder,
@@ -42,7 +42,7 @@ const CourseList = React.memo(() => {
       : 0
   }), [courses, getGradeA]);
 
-  if (loading) {
+  if (isLoading) {
     return <LoadingState />;
   }
 
@@ -111,7 +111,7 @@ const CourseList = React.memo(() => {
           </div>
         ))}
 
-        {courses.length === 0 && !loading && (
+        {courses.length === 0 && !isLoading && (
           <div className="text-center py-12 text-gray-500">
             No courses found. Try adjusting your search or filters.
           </div>

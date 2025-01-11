@@ -1,4 +1,5 @@
-// src/components/course-planner/GraduationRequirements.tsx
+//src/components/course-planner/GraduationRequirements.tsx
+
 
 import React, { useMemo } from 'react';
 import { AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight } from 'lucide-react';
@@ -29,7 +30,6 @@ function RequirementSection({ result, expanded, onToggle }: RequirementSectionPr
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      {/* 헤더 */}
       <button
         onClick={onToggle}
         className={`w-full p-4 flex items-center justify-between ${getStatusBg(result.satisfied)}`}
@@ -51,7 +51,6 @@ function RequirementSection({ result, expanded, onToggle }: RequirementSectionPr
         )}
       </button>
 
-      {/* 상세 내용 */}
       {expanded && (
         <div className="p-4 bg-white">
           <div className="space-y-3">
@@ -102,37 +101,18 @@ export default function GraduationRequirements() {
         savedCourses: []
       },
       {
-        major: "Computer Science",
-        requirements: [
-          {
-            type: 'credits',
-            id: 'total-credits',
-            name: '총 이수 학점',
-            totalCredits: 120,
-            minimumPerCategory: {
-              'COMP SCI': 40,
-              'MATH': 15,
-              'Communications': 6
-            }
-          },
-          {
-            type: 'core',
-            id: 'core-courses',
-            name: '핵심 과목',
-            courses: [
-              { courseId: 'COMP SCI 300', required: true },
-              { courseId: 'COMP SCI 400', required: true },
-              { courseId: 'MATH 222', required: true }
-            ]
-          },
-          {
-            type: 'gpa',
-            id: 'gpa-requirement',
-            name: 'GPA 요건',
-            minimumGPA: 2.0,
-            minimumMajorGPA: 2.5
-          }
-        ]
+        totalCredits: 120,
+        coreCourses: [
+          { code: 'COMP SCI 300', name: 'Programming II' },
+          { code: 'COMP SCI 400', name: 'Programming III' },
+          { code: 'MATH 222', name: 'Calculus II' }
+        ],
+        minimumGPA: 2.0,
+        distribution: {
+          'COMP SCI': 40,
+          'MATH': 15,
+          'Communications': 6
+        }
       },
       allCourses
     );
@@ -159,18 +139,15 @@ export default function GraduationRequirements() {
   return (
     <div className="bg-white rounded-lg shadow">
       <div className="p-6">
-        {/* 헤더 */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium">졸업 요건 진행 상황</h2>
           <div className="text-2xl font-bold text-blue-600">{overallProgress}%</div>
         </div>
 
-        {/* 진행률 바 */}
         <div className="mb-6">
           <ProgressBar percentage={overallProgress} />
         </div>
 
-        {/* 남은 요건 알림 */}
         {remainingRequirements.length > 0 && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-start gap-3">
@@ -193,11 +170,10 @@ export default function GraduationRequirements() {
           </div>
         )}
 
-        {/* 요건 목록 */}
         <div className="space-y-4">
           {validationResults.map((result, index) => (
             <RequirementSection
-              key={index}
+              key={result.type}
               result={result}
               expanded={expandedSections.includes(result.type)}
               onToggle={() => toggleSection(result.type)}

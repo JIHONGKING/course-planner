@@ -59,13 +59,16 @@ export default function ErrorDisplay() {
 
   return (
     <div className="fixed bottom-4 right-4 w-96 space-y-2 z-50">
-      {errors.map((error) => (
-        <ErrorAlert
-          key={error.timestamp}
-          error={error}
-          onClose={() => removeError(error.timestamp)}
-        />
-      ))}
-    </div>
+      {errors.map((error) => {
+        if (!error.timestamp) return null;
+        return (
+          <ErrorAlert
+            key={error.timestamp}
+            error={error}
+            onClose={() => removeError(error.timestamp || Date.now())}
+          />
+        );
+      })}
+      </div>
   );
 }

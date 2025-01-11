@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+//src/components/course/SearchCourses.tsximport React from 'react';
+
+
+import React from 'react';
 import { Search } from 'lucide-react';
 import { useCourses } from '@/hooks/useCourses';
 import CourseSearchResults from './CourseSearchResults';
 import CourseFilters from './CourseFilters';
+import type { SortOption } from '@/utils/sortUtils';
 
 export default function SearchCourses() {
   const {
     courses,
-    loading,
+    isLoading,
     error,
     searchTerm,
     setSearchTerm,
@@ -18,7 +22,8 @@ export default function SearchCourses() {
     handleSort,
     handleFilter,
     handlePageChange,
-    handleOrderChange
+    handleOrderChange,
+    searchCourses
   } = useCourses({ autoSearch: true });
 
   return (
@@ -32,9 +37,9 @@ export default function SearchCourses() {
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="과목명, 과목코드로 검색 (예: CS 300)"
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          disabled={loading}
+          disabled={isLoading}
         />
-        {loading && (
+        {isLoading && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
           </div>
@@ -67,7 +72,7 @@ export default function SearchCourses() {
           </div>
         ))}
         
-        {courses.length === 0 && !loading && searchTerm && (
+        {courses.length === 0 && !isLoading && searchTerm && (
           <div className="text-center py-8 text-gray-500">
             검색 결과가 없습니다
           </div>
@@ -78,13 +83,13 @@ export default function SearchCourses() {
 
       <CourseSearchResults
         courses={courses}
-        loading={loading}
-        error={error}
+        loading={isLoading}
+        error={error || undefined}
         currentPage={currentPage}
         totalPages={totalPages}
         sortBy={sortBy}
         sortOrder={sortOrder}
-        onSort={handleSort}
+        onSort={(sortBy: string) => handleSort(sortBy as SortOption)}
         onOrderChange={handleOrderChange}
         onPageChange={handlePageChange}
       />

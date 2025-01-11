@@ -13,5 +13,20 @@ export interface SearchResponse {
   total: number;
   page: number;
   totalPages: number;
+}
+
+export interface SearchCoursesResponse extends SearchResponse {
   source: 'database' | 'madgrades' | 'none';
+  currentPage: number;
+}
+
+export interface MetricsResponse {
+  timestamp: number;
+  metrics: Record<string, any>;
+  slowOperations: Array<{
+    name: string;
+    duration: number;
+    timestamp: number;
+  }>;
+  [key: string]: unknown;
 }

@@ -1,5 +1,4 @@
 // src/components/common/CourseCard.tsx
-
 import React, { useState } from 'react';
 import { Info, Plus, X, Clock } from 'lucide-react';
 import type { Course } from '@/types/course';
@@ -32,14 +31,14 @@ export default function CourseCard({
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const { schedule, updateSchedule, isLoading, error } = useCourseSchedule({
     courseId: course.id,
-    initialSchedule: course.schedule
+    initialSchedule: course.courseSchedules
   });
 
   // Schedule display helper
-  const formatScheduleDisplay = (schedule: Course['schedule']) => {
-    if (!schedule?.length) return null;
-
-    return schedule.map(slot => 
+  const formatScheduleDisplay = (schedules: Course['courseSchedules']) => {
+    if (!schedules?.length) return null;
+    
+    return schedules.map(slot => 
       `${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`
     ).join(', ');
   };
@@ -53,8 +52,43 @@ export default function CourseCard({
                    hover:bg-gray-50 transition-colors
                    ${className}`}
       >
-        {/* 기존 CourseCard 내용... */}
-        
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-medium text-gray-900">{course.code}</h3>
+            <p className="text-sm text-gray-500">{course.name}</p>
+            <p className="text-xs text-gray-400">{course.credits} credits</p>
+            <div className="text-xs text-green-600">
+              A: {getGradeA(course.gradeDistribution)}%
+            </div>
+          </div>
+          
+          {/* Actions */}
+          <div className="flex space-x-2">
+            {onAdd && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdd(course);
+                }}
+                className="p-1 text-gray-400 hover:text-green-500"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
+            {onRemove && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                className="p-1 text-gray-400 hover:text-red-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Schedule Section */}
         {schedule && schedule.length > 0 && (
           <div className="mt-2 text-sm text-gray-600">

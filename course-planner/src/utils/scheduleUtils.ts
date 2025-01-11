@@ -18,6 +18,7 @@ export function doTimeSlotsOverlap(slot1: CourseSchedule, slot2: CourseSchedule)
   return (start1 < end2) && (end1 > start2);
 }
 
+// findScheduleConflicts를 export로 변경
 export function findScheduleConflicts(courses: Course[]): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = [];
 
@@ -26,22 +27,20 @@ export function findScheduleConflicts(courses: Course[]): ScheduleConflict[] {
       const course1 = courses[i];
       const course2 = courses[j];
 
-      // Skip if either course doesn't have schedules
-      if (!course1.courseSchedules?.length || !course2.courseSchedules?.length) continue;
-
-      for (const slot1 of course1.courseSchedules) {
-        for (const slot2 of course2.courseSchedules) {
+      for (const slot1 of course1.courseSchedules || []) {
+        for (const slot2 of course2.courseSchedules || []) {
           if (doTimeSlotsOverlap(slot1, slot2)) {
             conflicts.push({
               course1,
               course2,
-              overlappingSlots: { slot1, slot2 }
+              overlappingSlots: {
+                slot1,
+                slot2
+              }
             });
-            // Break inner loops once conflict is found
             break;
           }
         }
-        if (conflicts.length > conflicts.length - 1) break;
       }
     }
   }

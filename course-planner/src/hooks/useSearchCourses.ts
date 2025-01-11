@@ -1,50 +1,55 @@
-// src/hooks/useSearchCourses.ts
-import { useState } from 'react';
-import type { Course } from '@/types/course';
+// src/hooks/useSearchCourses.tsuseSearchCourses
 
-interface SearchResults {
-  courses: Course[];
-  total: number;
-  page: number;
-  totalPages: number;
-}
+import { useState, useCallback } from 'react';
+import type { Course } from '@/types/course';
+import type { SortOption } from '@/utils/sortUtils';
 
 export function useSearchCourses() {
-  const [results, setResults] = useState<SearchResults>({
-    courses: [],
-    total: 0,
-    page: 1,
-    totalPages: 0
-  });
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const searchCourses = async (query: string, page = 1) => {
+  const searchCourses = useCallback(async (query: string, currentPage: number = 1) => {
+    if (!query.trim()) {
+      setCourses([]);
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `/api/courses/search?query=${encodeURIComponent(query)}&page=${page}`
+        `/api/courses/search?query=${encodeURIComponent(query)}&page=${currentPage}`
       );
+      const data = await response.json();
       
       if (!response.ok) {
-        throw new Error('Failed to search courses');
+        throw new Error(data.error || 'Failed to search courses');
       }
-
-      const data = await response.json();
-      setResults(data);
+      
+      setCourses(data.courses);
+      setTotalPages(data.totalPages || 1);
+      setPage(currentPage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Search failed');
+      setCourses([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   return {
-    ...results,
+    courses,
     isLoading,
     error,
-    searchCourses
+    searchCourses,
+    currentPage: page,
+    totalPages,
+    searchTerm,
+    setSearchTerm
   };
 }

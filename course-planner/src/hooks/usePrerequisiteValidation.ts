@@ -32,7 +32,7 @@ export function usePrerequisiteValidation() {
     );
 
     if (!validation.isValid) {
-      setValidationError(validation.message);
+      setValidationError(validation.messages[0] || null);     
       return false;
     }
 
