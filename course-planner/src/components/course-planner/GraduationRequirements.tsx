@@ -7,6 +7,7 @@ import type { RequirementValidationResult } from '@/types/graduation';
 import { GraduationValidator } from '@/utils/graduationUtils';
 import { usePlanner } from '@/hooks/usePlanner';
 import { useCourseData } from '@/hooks/useCourseData';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'; // 선택적 추가
 
 interface RequirementSectionProps {
   result: RequirementValidationResult;
@@ -91,7 +92,7 @@ export default function GraduationRequirements() {
   const { courses: allCourses } = useCourseData();
   const [expandedSections, setExpandedSections] = React.useState<string[]>([]);
 
-  // 졸업 요건 검증 결과 계산
+  // 기존 validationResults 계산 로직 유지
   const validationResults = useMemo(() => {
     const validator = new GraduationValidator(
       {
@@ -103,22 +104,25 @@ export default function GraduationRequirements() {
       {
         totalCredits: 120,
         coreCourses: [
-          { code: 'COMP SCI 300', name: 'Programming II' },
-          { code: 'COMP SCI 400', name: 'Programming III' },
-          { code: 'MATH 222', name: 'Calculus II' }
+          { code: 'COMP SCI 300', name: 'Programming II', required: true },  // required 추가
+          { code: 'COMP SCI 400', name: 'Programming III', required: true },
+          { code: 'MATH 222', name: 'Calculus II', required: true }
         ],
         minimumGPA: 2.0,
         distribution: {
           'COMP SCI': 40,
           'MATH': 15,
           'Communications': 6
-        }
+        },
+        requiredCredits: 120,  // 추가
+        requiredGPA: 2.0      // 추가
       },
       allCourses
     );
 
     return validator.validateAll();
   }, [academicPlan, allCourses]);
+
 
   // 전체 진행률 계산
   const overallProgress = useMemo(() => {

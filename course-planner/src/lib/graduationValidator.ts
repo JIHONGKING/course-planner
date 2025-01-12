@@ -1,4 +1,3 @@
-// src/lib/graduationValidator.ts
 import type { Course, AcademicPlan } from '@/types/course';
 import type { 
   GraduationRequirement, 
@@ -60,9 +59,33 @@ export class GraduationValidator {
         current = this.calculateGPA(completedCourses);
         break;
   
-      case 'distribution':
-        // 구현 추가 예정
-        break;
+        case 'distribution':
+          const departmentCredits = new Map<string, number>();
+          
+          // 학과별 이수 학점 계산
+          completedCourses.forEach(course => {
+            const currentCredits = departmentCredits.get(course.department) || 0;
+            departmentCredits.set(course.department, currentCredits + course.credits);
+          });
+        
+          // distribution 요건 검증
+          let totalDistributionCredits = 0;
+          let satisfiedCategories = 0;
+          const distributionRequirements = this.requirements.distribution;
+        
+          Object.entries(distributionRequirements).forEach(([dept, required]) => {
+            const completed = departmentCredits.get(dept) || 0;
+            totalDistributionCredits += completed;
+            if (completed >= required) {
+              satisfiedCategories++;
+            }
+          });
+        
+          current = totalDistributionCredits;
+          courses = completedCourses
+            .filter(course => distributionRequirements[course.department])
+            .map(course => course.code);
+          break;
     }
   
     return {
@@ -185,12 +208,14 @@ export class GraduationValidator {
 
   private calculateGPA(courses: Course[]): number {
     if (courses.length === 0) return 0;
-
+  
     const totalPoints = courses.reduce((sum, course) => {
       const gradeA = parseFloat(getGradeA(course.gradeDistribution));
-      return sum + (gradeA * course.credits);
+      // A학점 비율을 4.0 스케일로 변환
+      const gpaPoints = (gradeA / 100) * 4.0;
+      return sum + (gpaPoints * course.credits);
     }, 0);
-
+  
     const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0);
     return totalPoints / totalCredits;
   }
