@@ -1,10 +1,30 @@
 // src/utils/scheduleUtils.ts
 
-import type { Course, CourseSchedule, ScheduleConflict } from '@/types/course';
+import type { Course, CourseSchedule, DayOfWeek, ScheduleConflict } from '@/types/course';
+
+export interface TimeRange {
+  start: string;
+  end: string;
+}
+
+export interface DaySchedule {
+  dayOfWeek: DayOfWeek;
+  timeSlots: TimeRange[];
+}
+
+export type WeeklySchedule = {
+  [K in DayOfWeek]?: TimeRange[];
+};
 
 export function timeToMinutes(time: string): number {
   const [hours, minutes] = time.split(':').map(Number);
   return hours * 60 + minutes;
+}
+
+export function minutesToTime(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 }
 
 export function doTimeSlotsOverlap(slot1: CourseSchedule, slot2: CourseSchedule): boolean {
@@ -18,7 +38,6 @@ export function doTimeSlotsOverlap(slot1: CourseSchedule, slot2: CourseSchedule)
   return (start1 < end2) && (end1 > start2);
 }
 
-// findScheduleConflicts를 export로 변경
 export function findScheduleConflicts(courses: Course[]): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = [];
 
@@ -51,10 +70,7 @@ export function findScheduleConflicts(courses: Course[]): ScheduleConflict[] {
 export function canAddCourseToSchedule(
   newCourse: Course,
   existingCourses: Course[]
-): {
-  canAdd: boolean;
-  conflicts: ScheduleConflict[];
-} {
+): { canAdd: boolean; conflicts: ScheduleConflict[] } {
   if (!newCourse.courseSchedules?.length) {
     return { canAdd: true, conflicts: [] };
   }
@@ -93,47 +109,93 @@ function findTimeConflicts(course1: Course, course2: Course): { slot1: CourseSch
   return null;
 }
 
-export function formatTimeSlot(slot: CourseSchedule): string {
-  return `${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`;
+// 스케줄 최적화
+export function optimizeWeeklySchedule(courses: Course[]): WeeklySchedule {
+  const schedule: WeeklySchedule = {};
+  
+  courses.forEach(course => {
+    (course.courseSchedules || []).forEach(slot => {
+      if (!schedule[slot.dayOfWeek]) {
+        schedule[slot.dayOfWeek] = [];
+      }
+      schedule[slot.dayOfWeek]?.push({
+        start: slot.startTime,
+        end: slot.endTime
+      });
+    });
+  });
+
+  const days = Object.keys(schedule) as DayOfWeek[];
+  days.forEach(day => {
+    if (schedule[day]) {
+      schedule[day] = mergeTimeSlots(schedule[day] || []);
+    }
+  });
+
+  return schedule;
 }
 
-export function formatConflictMessage(conflict: ScheduleConflict): string {
-  return `Schedule conflict between ${conflict.course1.code} and ${conflict.course2.code}: ` +
-    `${formatTimeSlot(conflict.overlappingSlots.slot1)} overlaps with ${formatTimeSlot(conflict.overlappingSlots.slot2)}`;
-}
+export function mergeTimeSlots(slots: TimeRange[]): TimeRange[] {
+  if (slots.length <= 1) return slots;
 
-// 수업 시간이 적절한지 검사하는 유틸리티 함수들
-export function isValidDayOfWeek(day: string): boolean {
-  const validDays = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
-  return validDays.includes(day);
-}
+  const sorted = slots.sort((a, b) => 
+    timeToMinutes(a.start) - timeToMinutes(b.start)
+  );
 
-export function isValidTimeFormat(time: string): boolean {
-  const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-  return timeRegex.test(time);
-}
+  const merged: TimeRange[] = [sorted[0]];
 
-export function isValidTimeRange(startTime: string, endTime: string): boolean {
-  if (!isValidTimeFormat(startTime) || !isValidTimeFormat(endTime)) {
-    return false;
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i];
+    const last = merged[merged.length - 1];
+
+    if (timeToMinutes(current.start) <= timeToMinutes(last.end)) {
+      last.end = timeToMinutes(current.end) > timeToMinutes(last.end) 
+        ? current.end 
+        : last.end;
+    } else {
+      merged.push(current);
+    }
   }
 
-  return timeToMinutes(startTime) < timeToMinutes(endTime);
+  return merged;
 }
 
-export function isWithinOperatingHours(
-  startTime: string,
-  endTime: string,
-  operatingHours = { start: '08:00', end: '22:00' }
-): boolean {
-  if (!isValidTimeFormat(startTime) || !isValidTimeFormat(endTime)) {
-    return false;
-  }
+// 공강 시간 찾기
+export function findFreeTimeSlots(
+  schedule: WeeklySchedule,
+  minDuration: number = 30
+): WeeklySchedule {
+  const freeTime: WeeklySchedule = {};
+  const workingHours = { start: '09:00', end: '17:00' };
+  const days = Object.keys(schedule) as DayOfWeek[];
 
-  const start = timeToMinutes(startTime);
-  const end = timeToMinutes(endTime);
-  const opStart = timeToMinutes(operatingHours.start);
-  const opEnd = timeToMinutes(operatingHours.end);
+  days.forEach(day => {
+    freeTime[day] = [];
+    const daySchedule = schedule[day] || [];
 
-  return start >= opStart && end <= opEnd;
+    let currentTime = timeToMinutes(workingHours.start);
+    const endOfDay = timeToMinutes(workingHours.end);
+
+    daySchedule.forEach(slot => {
+      const slotStart = timeToMinutes(slot.start);
+      
+      if (slotStart - currentTime >= minDuration) {
+        freeTime[day]?.push({
+          start: minutesToTime(currentTime),
+          end: minutesToTime(slotStart)
+        });
+      }
+      
+      currentTime = timeToMinutes(slot.end);
+    });
+
+    if (endOfDay - currentTime >= minDuration) {
+      freeTime[day]?.push({
+        start: minutesToTime(currentTime),
+        end: minutesToTime(endOfDay)
+      });
+    }
+  });
+
+  return freeTime;
 }

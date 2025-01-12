@@ -2,7 +2,6 @@
   "name": "course-planner",
   "version": "0.1.0",
   "private": true,
-
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -14,6 +13,7 @@
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@prisma/client": "^5.8.1",
+    "class-variance-authority": "^0.7.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.263.1",
     "next": "14.0.4",

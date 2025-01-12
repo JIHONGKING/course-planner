@@ -15,6 +15,7 @@ import AcademicYear from '@/components/course-planner/AcademicYear';
 import GraduationRequirements from '@/components/course-planner/GraduationRequirements';
 import CourseRecommendations from '@/components/course-planner/CourseRecommendations';
 import SearchCourses from '@/components/course/SearchCourses';
+import CourseRecommender from '@/components/course-planner/CourseRecommendations';  // 추가
 
 
 function isGradeDistribution(value: any): value is GradeDistribution {
@@ -121,6 +122,8 @@ export default function Home() {
       console.error('Failed to save course:', error);
     }
   };
+
+  const handleCourseSelect = handleCourseClick;  
 
   const handleCourseAdd = (course: Course, semesterId: string) => {
     try {
@@ -299,8 +302,12 @@ export default function Home() {
 
           {/* Right Column */}
           <div>
-            <CourseRecommendations />
-          </div>
+          <CourseRecommender
+  courses={courses} // courses prop 추가
+  completedCourses={completedCourses}
+  currentTermCourses={currentTermCourses}
+  onSelectCourse={handleCourseSelect}
+/>          </div>
         </div>
 
         {/* Auto Fill Preview Banner */}

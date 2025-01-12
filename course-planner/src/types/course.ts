@@ -34,6 +34,8 @@ export interface ScheduleConflict {
 export interface ValidationResult {
   isValid: boolean;
   conflicts: ScheduleConflict[];
+  messages: string[];  // 추가됨
+  totalCredits: number;  // 추가됨
 }
 export interface Schedule {
   dayOfWeek: DayOfWeek;

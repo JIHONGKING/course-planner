@@ -1,12 +1,19 @@
 // src/lib/graduationValidator.ts
 import type { Course, AcademicPlan } from '@/types/course';
-import type { GraduationRequirements, RequirementValidationResult } from '@/types/graduation';
+import type { 
+  GraduationRequirement, 
+  RequirementValidationResult,
+  RequirementItem,
+  RequirementCriteria,
+  RequirementProgress,
+  GraduationProgress
+} from '@/types/graduation';
 import { getGradeA } from '@/utils/gradeUtils';
 
 export class GraduationValidator {
   constructor(
     private plan: AcademicPlan,
-    private requirements: GraduationRequirements,
+    private requirements: GraduationRequirement,
     private allCourses: Course[]
   ) {}
 
@@ -17,6 +24,54 @@ export class GraduationValidator {
       this.validateGPA(),
       this.validateDistribution()
     ];
+  }
+
+  private isGraduationComplete(progress: GraduationProgress): boolean {
+    return (
+      progress.totalCredits >= this.requirements.requiredCredits &&
+      progress.currentGPA >= this.requirements.requiredGPA &&
+      progress.remainingRequirements.length === 0
+    );
+  }
+
+  private validateCriteria(criteria: RequirementCriteria): RequirementProgress {
+    const completedCourses = this.getCompletedCourses();
+    let current = 0;
+    let courses: string[] = [];
+  
+    switch (criteria.type) {
+      case 'credits':
+        current = completedCourses.reduce((sum, course) => sum + course.credits, 0);
+        courses = completedCourses.map(course => course.code);
+        break;
+        
+      case 'courses':
+        // coreCourses 배열의 code 속성만 추출하여 비교
+        const requiredCourseCodes = this.requirements.coreCourses.map(course => course.code);
+        current = completedCourses.filter(course => 
+          requiredCourseCodes.includes(course.code)
+        ).length;
+        courses = completedCourses
+          .filter(course => requiredCourseCodes.includes(course.code))
+          .map(course => course.code);
+        break;
+  
+      case 'gpa':
+        current = this.calculateGPA(completedCourses);
+        break;
+  
+      case 'distribution':
+        // 구현 추가 예정
+        break;
+    }
+  
+    return {
+      criteriaId: criteria.id,
+      current,
+      required: criteria.required,
+      completed: current >= criteria.required,
+      courses
+    };
   }
 
   private validateTotalCredits(): RequirementValidationResult {
@@ -44,7 +99,7 @@ export class GraduationValidator {
 
   private validateCoreCourses(): RequirementValidationResult {
     const completedCourses = this.getCompletedCourses();
-    const coreResults = this.requirements.coreCourses.map(req => {
+    const coreResults: RequirementItem[] = this.requirements.coreCourses.map(req => {
       const completed = completedCourses.some(course => course.code === req.code);
       return {
         name: req.code,
@@ -57,7 +112,7 @@ export class GraduationValidator {
     const satisfied = coreResults.every(result => result.satisfied);
 
     return {
-      type: 'core',
+      type: 'core' as const,
       satisfied,
       current: coreResults.filter(r => r.satisfied).length,
       required: this.requirements.coreCourses.length,
@@ -67,6 +122,7 @@ export class GraduationValidator {
       }
     };
   }
+
 
   private validateGPA(): RequirementValidationResult {
     const completedCourses = this.getCompletedCourses();
@@ -96,16 +152,16 @@ export class GraduationValidator {
     const completedCourses = this.getCompletedCourses();
     const requirements = this.requirements.distribution;
     
-    const results = Object.entries(requirements).map(([category, required]) => {
+    const results: RequirementItem[] = Object.entries(requirements).map(([category, required]) => {
       const current = completedCourses.reduce((sum, course) => {
         return sum + (course.department === category ? course.credits : 0);
       }, 0);
 
       return {
         name: category,
-        satisfied: current >= required,
+        satisfied: current >= (required as number),
         current,
-        required
+        required: required as number
       };
     });
 
@@ -124,6 +180,8 @@ export class GraduationValidator {
   private calculateTotalCredits(): number {
     return this.getCompletedCourses().reduce((sum, course) => sum + course.credits, 0);
   }
+
+  
 
   private calculateGPA(courses: Course[]): number {
     if (courses.length === 0) return 0;

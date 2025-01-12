@@ -1,16 +1,48 @@
 // src/types/graduation.ts
 
-export interface GraduationRequirements {
-  totalCredits: number;
-  coreCourses: Array<{
-    code: string;
-    name: string;
-  }>;
-  minimumGPA: number;
+
+export interface RequirementCriteria {
+  id: string;
+  name: string;
+  type: 'credits' | 'courses' | 'gpa' | 'distribution';
+  required: number;
+  description?: string;
+}
+
+export interface GraduationRequirement {
+  id: string;
+  name: string;
+  totalCredits: number;       // 추가
+  minimumGPA: number;         // 추가
+  requiredCredits: number;
+  requiredGPA: number;
   distribution: {
     [department: string]: number;
   };
-  requirements?: RequirementType[];
+  coreCourses: CoreCourse[];  // string[] -> CoreCourse[]
+}
+
+export interface CoreCourse {
+  code: string;
+  name: string;
+  required: boolean;
+}
+
+
+export interface RequirementProgress {
+  criteriaId: string;
+  current: number;
+  required: number;
+  completed: boolean;
+  courses?: string[];  // 해당 요건에 적용된 과목들
+}
+
+export interface GraduationProgress {
+  totalCredits: number;
+  currentGPA: number;
+  completedRequirements: RequirementProgress[];
+  remainingRequirements: RequirementProgress[];
+  isComplete: boolean;
 }
 
 export interface DistributionRequirement extends RequirementBase {
@@ -21,6 +53,7 @@ export interface DistributionRequirement extends RequirementBase {
   }[];
   minimumCategories?: number;
 }
+
 
 export type RequirementType =
   | CreditRequirement
