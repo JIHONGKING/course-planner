@@ -14,7 +14,7 @@ interface PerformanceMetricsData {
       minDuration: number;
       maxDuration: number;
       p95Duration: number;
-      totalDuration: number;
+      totalDuration: number;  // 추가됨
     };
     trend: number[];
   }>;
@@ -145,20 +145,6 @@ export default function PerformanceDashboard({
     return currAvg > prevAvg ? 'up' : 'down';
   };
 
-  if (!metrics || Object.keys(metrics.operations).length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <Info className="h-8 w-8 text-blue-500" />
-        <button
-          onClick={onRefresh}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-        >
-          Load Metrics
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6 bg-gray-50">
       {/* Header */}
@@ -198,7 +184,11 @@ export default function PerformanceDashboard({
       {/* Main Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {Object.entries(metrics.operations).map(([category, data]) => {
-          const avgTime = data.stats.averageDuration;
+          const summary = {
+            totalTime: data.stats.totalDuration,
+            count: data.stats.count,
+          };
+          const avgTime = summary.count > 0 ? summary.totalTime / summary.count : 0;
           const trend = getPerformanceTrend(data.trend);
           return (
             <MetricCard
