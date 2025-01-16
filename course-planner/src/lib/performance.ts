@@ -9,6 +9,33 @@ interface PerformanceMetric {
   metadata?: Record<string, any>;
 }
 
+declare global {
+  interface Performance {
+    memory?: {
+      jsHeapSizeLimit: number;
+      totalJSHeapSize: number;
+      usedJSHeapSize: number;
+    };
+  }
+}
+
+export interface MemoryStats {
+  jsHeapSize: number;
+  totalJSHeapSize: number;
+  usedJSHeapSize: number;
+  timestamp: number;
+}
+
+export interface MemoryLeak {
+  id: string;
+  type: string;
+  size: number;
+  timestamp: number;
+  stackTrace?: string;
+  source?: string;
+}
+
+
 interface PerformanceSummary {
   category: string;
   averageTime: number;

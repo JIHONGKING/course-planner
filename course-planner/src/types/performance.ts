@@ -1,5 +1,3 @@
-// src/types/performance.ts
-
 export interface OperationStats {
   count: number;
   averageDuration: number;
@@ -51,4 +49,38 @@ export interface AnalysisOptions {
   timeWindow: number;       // Analysis window in milliseconds
   anomalyThreshold: number; // Standard deviations for anomaly detection
   predictionWindow: number; // Future prediction window in milliseconds
+}
+
+export interface MemoryStats {
+  jsHeapSize: number;
+  totalJSHeapSize: number;
+  usedJSHeapSize: number;
+  timestamp: number;
+}
+
+export interface MemoryLeak {
+  id: string;
+  type: string;
+  size: number;
+  timestamp: number;
+  stackTrace?: string;
+  source?: string;
+}
+
+interface ExtendedPerformance extends Performance {
+  memory?: {
+    jsHeapSizeLimit: number;
+    totalJSHeapSize: number;
+    usedJSHeapSize: number;
+  };
+}
+
+declare global {
+  interface Performance {
+    memory?: {
+      jsHeapSizeLimit: number;
+      totalJSHeapSize: number;
+      usedJSHeapSize: number;
+    };
+  }
 }

@@ -1,115 +1,196 @@
-// src/components/performance/MemoryMonitor.tsx
+// MemoryMonitor.tsx 
 
-import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { AlertTriangle, Activity } from 'lucide-react';
-import { MemoryMonitor, type MemoryStats, type MemoryLeak } from '@/lib/performance/memoryMonitor';
+export interface MemoryStats {
+  jsHeapSize: number;
+  totalJSHeapSize: number;
+  usedJSHeapSize: number;
+  timestamp: number;
+}
 
-const formatBytes = (bytes: number) => {
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  if (bytes === 0) return '0 Byte';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${Math.round(bytes / Math.pow(1024, i))} ${sizes[i]}`;
-};
+export interface MemoryLeak {
+  id: string;
+  type: string;
+  size: number;
+  timestamp: number;
+  stackTrace?: string;
+  source?: string;
+}
 
-export function MemoryMonitorComponent() {
-  const [memoryStats, setMemoryStats] = useState<MemoryStats[]>([]);
-  const [memoryLeaks, setMemoryLeaks] = useState<MemoryLeak[]>([]);
+interface MemoryThresholds {
+  warning: number;
+  critical: number;
+}
 
-  useEffect(() => {
-    const monitor = MemoryMonitor.getInstance();
-    
-    const unsubscribe = monitor.subscribe((stats) => {
-      setMemoryStats(monitor.getMemoryStats());
-      setMemoryLeaks(monitor.getMemoryLeaks());
-    });
+export class MemoryMonitor {
+  private static instance: MemoryMonitor;
+  private memoryStats: MemoryStats[] = [];
+  private memoryLeaks: MemoryLeak[] = [];
+  private readonly MAX_STATS_LENGTH = 100;
+  private subscribers = new Map<string, (stats: MemoryStats) => void>();
+  private monitoringInterval: number | null = null;
+  private cleanupInterval: number | null = null;
+  private readonly MONITORING_INTERVAL = 5000;
+  private readonly CLEANUP_INTERVAL = 30000;
+  private readonly thresholds: MemoryThresholds = {
+    warning: 0.7,
+    critical: 0.9
+  };
 
+  private constructor() {}
+
+  public static getInstance(): MemoryMonitor {
+    if (!MemoryMonitor.instance) {
+      MemoryMonitor.instance = new MemoryMonitor();
+    }
+    return MemoryMonitor.instance;
+  }
+
+  public startMonitoring(): void {
+    if (this.monitoringInterval !== null) {
+      return;
+    }
+
+    this.monitoringInterval = window.setInterval(() => {
+      this.collectMemoryStats();
+    }, this.MONITORING_INTERVAL);
+
+    this.cleanupInterval = window.setInterval(() => {
+      this.cleanup();
+    }, this.CLEANUP_INTERVAL);
+
+    this.collectMemoryStats();
+  }
+
+  public stopMonitoring(): void {
+    if (this.monitoringInterval !== null) {
+      window.clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+    }
+    if (this.cleanupInterval !== null) {
+      window.clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  public subscribe(id: string, callback: (stats: MemoryStats) => void): () => void {
+    this.subscribers.set(id, callback);
     return () => {
-      unsubscribe();
+      this.subscribers.delete(id);
     };
-  }, []);
+  }
 
-  return (
-    <div className="space-y-6">
-      {/* Memory Usage Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-blue-500" />
-            Memory Usage
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={memoryStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-                />
-                <YAxis
-                  tickFormatter={formatBytes}
-                />
-                <Tooltip
-                  labelFormatter={(timestamp) => new Date(Number(timestamp)).toLocaleString()}
-                  formatter={(value: any) => formatBytes(Number(value))}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="usedJSHeapSize"
-                  stroke="#3B82F6"
-                  name="Used Heap"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="totalJSHeapSize"
-                  stroke="#6B7280"
-                  name="Total Heap"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+  public getMemoryStats(): MemoryStats[] {
+    return [...this.memoryStats];
+  }
 
-      {/* Memory Leaks */}
-      {memoryLeaks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              Potential Memory Leaks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {memoryLeaks.map((leak) => (
-                <div
-                  key={leak.id}
-                  className="p-4 bg-yellow-50 rounded-lg"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Memory Growth Detected</span>
-                    <span className="text-sm text-gray-600">
-                      {new Date(leak.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-yellow-700">
-                    Size: {formatBytes(leak.size)}
-                  </p>
-                  {leak.stackTrace && (
-                    <pre className="mt-2 text-xs bg-white p-2 rounded overflow-x-auto">
-                      {leak.stackTrace}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
+  public getMemoryLeaks(): MemoryLeak[] {
+    return [...this.memoryLeaks];
+  }
+
+  private collectMemoryStats(): void {
+    if (!this.isMemoryAPIAvailable()) {
+      console.warn('Memory API is not available in this environment');
+      return;
+    }
+
+    const memory = (performance as any).memory;
+    if (!memory) return;
+
+    const stats: MemoryStats = {
+      jsHeapSize: memory.jsHeapSizeLimit,
+      totalJSHeapSize: memory.totalJSHeapSize,
+      usedJSHeapSize: memory.usedJSHeapSize,
+      timestamp: Date.now()
+    };
+
+    this.addStats(stats);
+    this.detectMemoryLeak(stats);
+    this.notifySubscribers(stats);
+  }
+
+  private detectMemoryLeak(stats: MemoryStats): void {
+    const recentStats = this.memoryStats.slice(-5);
+    if (recentStats.length < 5) return;
+
+    const usageGrowth = recentStats.every((stat, index) => 
+      index === 0 || stat.usedJSHeapSize > recentStats[index - 1].usedJSHeapSize
+    );
+
+    if (usageGrowth) {
+      const leak: MemoryLeak = {
+        id: `leak-${Date.now()}`,
+        type: 'continuous-growth',
+        size: stats.usedJSHeapSize - recentStats[0].usedJSHeapSize,
+        timestamp: Date.now(),
+        stackTrace: new Error().stack,
+        source: 'memory-growth-detection'
+      };
+      this.memoryLeaks.push(leak);
+    }
+  }
+
+  private addStats(stats: MemoryStats): void {
+    this.memoryStats.push(stats);
+    if (this.memoryStats.length > this.MAX_STATS_LENGTH) {
+      this.memoryStats.shift();
+    }
+
+    const usageRatio = stats.usedJSHeapSize / stats.jsHeapSize;
+    if (usageRatio >= this.thresholds.critical) {
+      this.handleCriticalMemoryUsage(stats);
+    } else if (usageRatio >= this.thresholds.warning) {
+      this.handleWarningMemoryUsage(stats);
+    }
+  }
+
+  private handleCriticalMemoryUsage(stats: MemoryStats): void {
+    console.error('Critical memory usage detected:', {
+      used: this.formatBytes(stats.usedJSHeapSize),
+      total: this.formatBytes(stats.jsHeapSize)
+    });
+  }
+
+  private handleWarningMemoryUsage(stats: MemoryStats): void {
+    console.warn('High memory usage detected:', {
+      used: this.formatBytes(stats.usedJSHeapSize),
+      total: this.formatBytes(stats.jsHeapSize)
+    });
+  }
+
+  private notifySubscribers(stats: MemoryStats): void {
+    this.subscribers.forEach(callback => {
+      try {
+        callback(stats);
+      } catch (error) {
+        console.error('Error in memory stats subscriber:', error);
+      }
+    });
+  }
+
+  private isMemoryAPIAvailable(): boolean {
+    return (
+      typeof performance !== 'undefined' &&
+      performance.memory !== undefined
+    );
+  }
+
+  private formatBytes(bytes: number): string {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    const OLD_STATS_THRESHOLD = 3600000;
+
+    this.memoryStats = this.memoryStats.filter(stat =>
+      now - stat.timestamp < OLD_STATS_THRESHOLD
+    );
+
+    this.memoryLeaks = this.memoryLeaks.filter(leak =>
+      now - leak.timestamp < OLD_STATS_THRESHOLD
+    );
+  }
 }
