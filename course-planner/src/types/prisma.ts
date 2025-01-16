@@ -1,3 +1,5 @@
+// src/types/prisma.ts
+
 import { Prisma } from '@prisma/client';
 
 // CourseSchedule 타입을 Prisma 스키마와 일치하도록 수정

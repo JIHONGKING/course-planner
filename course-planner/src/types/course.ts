@@ -1,5 +1,4 @@
 // src/types/course.ts
-
 export interface GradeDistribution {
   A: string;
   AB: string;
@@ -8,53 +7,6 @@ export interface GradeDistribution {
   C: string;
   D: string;
   F: string;
-}
-
-export interface SemesterCourse extends Course {
-  semesterId: string;
-}
-
-export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
-
-export interface TimeSlot {
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-}
-
-export interface ScheduleConflict {
-  course1: Course;
-  course2: Course;
-  overlappingSlots: {
-    slot1: CourseSchedule;
-    slot2: CourseSchedule;
-  };
-}
-
-export interface ValidationResult {
-  isValid: boolean;
-  conflicts: ScheduleConflict[];
-  messages: string[];  // 추가됨
-  totalCredits: number;  // 추가됨
-}
-export interface Schedule {
-  dayOfWeek: DayOfWeek;
-  startTime: string;  // HH:mm format
-  endTime: string;    // HH:mm format
-}
-
-export interface CourseSchedule {
-  id?: string;
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-  courseId?: string;
-}
-
-export interface Prerequisite {
-  courseId: string;
-  type: 'required' | 'concurrent' | 'recommended';
-  grade?: string;
 }
 
 export interface Course {
@@ -68,15 +20,29 @@ export interface Course {
   prerequisites: Prerequisite[];
   term: string[];
   gradeDistribution: string | GradeDistribution;
-  courseSchedules: CourseSchedule[];  
-  createdAt?: string;
-  updatedAt?: string;
-  semesterId?: string;  // Optional field for when course is part of a semester
+  courseSchedules: CourseSchedule[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
+
+export interface CourseSchedule {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+}
+
+export interface Prerequisite {
+  courseId: string;
+  type: 'required' | 'concurrent' | 'recommended';
+  grade?: string;
 }
 
 export interface AcademicYear {
   id: string;
-  name: string;      // Freshman, Sophomore, etc.
+  name: string;
   yearName: string;  // Display name
   year: string;      // e.g., "2023-2024"
   startYear: number; // e.g., 2023
@@ -87,8 +53,8 @@ export interface Semester {
   id: string;
   term: string;
   year: number;
-  academicYearId: string;
   courses: Course[];
+  academicYearId: string;
 }
 
 export interface AcademicPlan {
@@ -98,21 +64,10 @@ export interface AcademicPlan {
   savedCourses: Course[];
 }
 
-export type ClassStanding = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';
-
 export interface UserPreferences {
   school: string;
   major: string;
   classStanding: string;
   graduationYear: string;
   planningStrategy: 'GPA' | 'Workload' | 'Balance';
-}
-
-export interface ScheduleConflict {
-  course1: Course;
-  course2: Course;
-  overlappingSlots: {
-    slot1: CourseSchedule;
-    slot2: CourseSchedule;
-  };
 }

@@ -7,6 +7,7 @@ export interface AppError {
   severity: ErrorSeverity;
   timestamp?: number;
   context?: Record<string, any>;
+  stack?: string;  // 추가된 stack 속성
 }
 
 export interface ValidationError extends AppError {

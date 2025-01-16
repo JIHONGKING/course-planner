@@ -10,84 +10,97 @@ generator client {
 }
 
 model Course {
-  id                 String           @id
-  code               String           @unique
-  name               String
-  description        String
-  credits            Float
-  department         String
-  level              String
-  prerequisites      String[]
-  term               String[]
-  gradeDistribution  Json
-  courseSchedules    CourseSchedules[]  // 모델명 수정
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-
+  id                String            @id @default(uuid())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  code              String            @unique
+  name              String
+  description       String?
+  credits           Int
+  department        String
+  level             String
+  prerequisites     String[]          @default([])
+  term              String[]
+  gradeDistribution Json?
+  courseSchedules   CourseSchedule[]
+  metadata          CourseMetadata?
   // 선수과목 관계
-  semesterCourses    SemesterCourse[]
-  prerequisiteFor    CoursePrerequisite[] @relation("Prerequisites")
-  requiredFor        CoursePrerequisite[] @relation("RequiredFor")
+  semesterCourses   SemesterCourse[]
+  prerequisiteFor   CoursePrerequisite[] @relation("Prerequisites")
+  requiredFor       CoursePrerequisite[] @relation("RequiredFor")
 }
 
-model CourseSchedules {  // 모델명 수정
-  id         String   @id @default(cuid())
-  courseId   String
-  course     Course   @relation(fields: [courseId], references: [id])
-  dayOfWeek  String
-  startTime  String
-  endTime    String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+}
 
-  @@index([courseId])
+model CourseSchedule {
+  id        String   @id @default(uuid())
+  courseId  String
+  dayOfWeek String
+  startTime String
+  endTime   String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model CourseMetadata {
+  id        String   @id @default(uuid())
+  courseId  String   @unique
+  data      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 model AcademicYear {
-  id        String     @id @default(cuid())
-  yearName  String
-  startYear Int
-  semesters Semester[]
-  planId    String
-  plan      AcademicPlan @relation(fields: [planId], references: [id])
+  id          String        @id @default(uuid())
+  yearName    String
+  startYear   Int
+  semesters   Semester[]
+  planId      String
+  plan        AcademicPlan @relation(fields: [planId], references: [id])
 }
 
 model Semester {
-  id             String           @id @default(cuid())
-  term           String
-  year           Int
+  id              String          @id @default(uuid())
+  term            String
+  year            Int
   academicYearId String
-  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id])
-  courses        SemesterCourse[]
+  academicYear    AcademicYear    @relation(fields: [academicYearId], references: [id])
+  courses         SemesterCourse[]
 }
 
 model SemesterCourse {
-  id         String   @id @default(cuid())
+  id          String  @id @default(uuid())
   courseId   String
   semesterId String
-  course     Course   @relation(fields: [courseId], references: [id])
+  course     Course  @relation(fields: [courseId], references: [id])
   semester   Semester @relation(fields: [semesterId], references: [id])
 }
 
 model AcademicPlan {
-  id           String         @id @default(cuid())
-  userId       String         @unique
-  years        AcademicYear[]
-  savedCourses Json
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id          String        @id @default(uuid())
+  userId      String        @unique
+  years       AcademicYear[]
+  savedCourses Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model CoursePrerequisite {
-  id             String   @id @default(cuid())
-  courseId       String   // The course that has prerequisites
-  course         Course   @relation("Prerequisites", fields: [courseId], references: [id])
-  prerequisiteId String   // The course that is required
-  prerequisite   Course   @relation("RequiredFor", fields: [prerequisiteId], references: [id])
-  type          String    // required, concurrent, recommended
-  minGrade      String?   // Minimum grade requirement (optional)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String  @id @default(uuid())
+  courseId       String  // The course that has prerequisites
+  course         Course  @relation("Prerequisites", fields: [courseId], references: [id])
+  prerequisiteId String  // The course that is required
+  prerequisite   Course  @relation("RequiredFor", fields: [prerequisiteId], references: [id])
+  type           String  @default("required") // required, concurrent, recommended
+  grade          String? // Minimum grade requirement (optional)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([courseId, prerequisiteId])
 }

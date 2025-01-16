@@ -1,4 +1,3 @@
-// src/hooks/useUserPreferences.ts
 import { useState, useCallback, useEffect } from 'react';
 import type { UserPreferences } from '@/types/course';
 
@@ -34,7 +33,7 @@ export function useUserPreferences() {
 
   const updatePreference = useCallback(
     <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
-      setPreferences(prev => ({
+      setPreferences((prev: UserPreferences) => ({ // 여기에 prev 매개변수 타입을 지정했습니다.
         ...prev,
         [key]: value
       }));

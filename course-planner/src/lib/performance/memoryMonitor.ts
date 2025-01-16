@@ -1,5 +1,3 @@
-// src/lib/performance/memoryMonitor.ts
-
 declare global {
   interface Performance {
     memory?: {
@@ -134,19 +132,21 @@ export class MemoryMonitor {
     const recentStats = this.memoryStats.slice(-5);
     if (recentStats.length < 5) return;
 
-    const usageGrowth = recentStats.every(
-      (stat, index) =>
-        index === 0 || stat.usedJSHeapSize > recentStats[index - 1].usedJSHeapSize
+    // 증가율 기반 탐지로 개선
+    const growthRates = recentStats.slice(1).map((stat, index) =>
+      (stat.usedJSHeapSize - recentStats[index].usedJSHeapSize) / recentStats[index].usedJSHeapSize
     );
+    const averageGrowthRate = growthRates.reduce((a, b) => a + b, 0) / growthRates.length;
+    const isAbnormalGrowth = averageGrowthRate > 0.1; // 10% 이상 증가율을 비정상으로 간주
 
-    if (usageGrowth) {
+    if (isAbnormalGrowth) {
       const leak: MemoryLeak = {
         id: `leak-${Date.now()}`,
-        type: 'continuous-growth',
+        type: 'abnormal-growth-rate',
         size: stats.usedJSHeapSize - recentStats[0].usedJSHeapSize,
         timestamp: Date.now(),
         stackTrace: new Error().stack,
-        source: 'memory-growth-detection',
+        source: 'growth-rate-detection',
       };
       this.memoryLeaks.push(leak);
     }
@@ -168,11 +168,13 @@ export class MemoryMonitor {
 
   private notifySubscribers(): void {
     const currentData = this.getCurrentData();
-    this.subscribers.forEach((callback) => {
+    this.subscribers.forEach((callback, id) => {
       try {
         callback(currentData);
       } catch (error) {
-        console.error('Error in memory stats subscriber:', error);
+        // 콜백 실행 실패 시 구독 제거
+        this.subscribers.delete(id);
+        console.warn(`Removing inactive subscriber: ${id}`);
       }
     });
   }

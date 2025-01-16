@@ -1,116 +1,214 @@
 // src/lib/prerequisites.ts
-import prisma from '@/lib/prisma';
+
+import { PrismaClient } from '@prisma/client';
 import type { Course, Prerequisite } from '@/types/course';
 
-interface PrerequisitePattern {
-  pattern: RegExp;
-  type: 'required' | 'concurrent' | 'recommended';
+const prisma = new PrismaClient();
+
+interface ValidationResult {
+  isValid: boolean;
+  messages: string[];
+  missingPrerequisites: Prerequisite[];
 }
 
-const PREREQUISITE_PATTERNS: PrerequisitePattern[] = [
-  {
-    pattern: /(?:Prerequisites?|Prereq):\s*([^.]+)/i,
-    type: 'required'
-  },
-  {
-    pattern: /Concurrent Registration:\s*([^.]+)/i,
-    type: 'concurrent'
-  },
-  {
-    pattern: /Recommended:\s*([^.]+)/i,
-    type: 'recommended'
-  }
-];
+export function validatePrerequisites(
+  course: Course,
+  completedCourses: Course[],
+  currentTermCourses: Course[] = []
+): ValidationResult {
+  const missingPrerequisites: Prerequisite[] = [];
+  const messages: string[] = [];
 
-const COURSE_CODE_PATTERN = /([A-Z]+(?:\s+[A-Z]+)*)\s+(\d{3})/g;
-const GRADE_REQUIREMENT_PATTERN = /grade of ([A-F])(?: or better)?/i;
+  for (const prereq of course.prerequisites) {
+    const isCompleted = completedCourses.some(c => c.code === prereq.courseId);
+    const isInProgress = currentTermCourses.some(c => c.code === prereq.courseId);
 
-export function extractPrerequisites(description: string): Prerequisite[] {
-  const prerequisites: Prerequisite[] = [];
-  
-  for (const { pattern, type } of PREREQUISITE_PATTERNS) {
-    const match = description.match(pattern);
-    if (match) {
-      const text = match[1].trim();
-      let courseMatch;
-      
-      while ((courseMatch = COURSE_CODE_PATTERN.exec(text)) !== null) {
-        const courseCode = courseMatch[0];
-        const gradeMatch = text.match(new RegExp(`${courseCode}[^.]*${GRADE_REQUIREMENT_PATTERN.source}`, 'i'));
-        
-        prerequisites.push({
-          courseId: courseCode,
-          type: type,
-          grade: gradeMatch ? gradeMatch[1].toUpperCase() : undefined
-        });
-      }
+    if (!isCompleted && !isInProgress) {
+      missingPrerequisites.push(prereq);
+      messages.push(`Missing prerequisite: ${prereq.courseId}${prereq.grade ? ` (minimum grade: ${prereq.grade})` : ''}`);
     }
   }
 
+  return {
+    isValid: missingPrerequisites.length === 0,
+    messages,
+    missingPrerequisites
+  };
+}
+
+export async function syncPrerequisitesWithDatabase(course: Course): Promise<void> {
+  if (!prisma) {
+    throw new Error('Prisma client is not initialized');
+  }
+
+  try {
+    await prisma.coursePrerequisite.deleteMany({
+      where: { courseId: course.id }
+    });
+
+    for (const prereq of course.prerequisites) {
+      await prisma.coursePrerequisite.create({
+        data: {
+          courseId: course.id,
+          prerequisiteId: prereq.courseId,
+          type: prereq.type
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Failed to sync prerequisites:', error);
+    throw error;
+  }
+}
+
+export function canTakeCourse(
+  course: Course,
+  completedCourses: Course[],
+  currentTermCourses: Course[],
+  term: string
+): {
+  canTake: boolean;
+  reason?: string;
+} {
+  // 학기 제공 여부 확인
+  if (!course.term.includes(term)) {
+    return {
+      canTake: false,
+      reason: `This course is not offered in ${term}`
+    };
+  }
+
+  // 이미 수강한 과목인지 확인
+  if (completedCourses.some(c => c.code === course.code)) {
+    return {
+      canTake: false,
+      reason: 'You have already completed this course'
+    };
+  }
+
+  // 현재 학기에 이미 등록되어 있는지 확인
+  if (currentTermCourses.some(c => c.code === course.code)) {
+    return {
+      canTake: false,
+      reason: 'This course is already in your current term'
+    };
+  }
+
+  // 선수과목 검증
+  const prereqValidation = validatePrerequisites(course, completedCourses, currentTermCourses);
+  if (!prereqValidation.isValid) {
+    return {
+      canTake: false,
+      reason: prereqValidation.messages.join(', ')
+    };
+  }
+
+  return { canTake: true };
+}
+
+export function parsePrerequisitesFromDescription(description: string): Prerequisite[] {
+  const prerequisites: Prerequisite[] = [];
+  const pattern = /(?:Prerequisites?|Prereq):\s*([^.]+)/i;
+  const match = description.match(pattern);
+  
+  if (match) {
+    const prereqText = match[1].trim();
+    const coursePattern = /([A-Z]+(?:\s+[A-Z]+)*)\s+(\d{3})(?:\s*\(([A-F])\))?/g;
+    let courseMatch;
+    
+    while ((courseMatch = coursePattern.exec(prereqText)) !== null) {
+      prerequisites.push({
+        courseId: courseMatch[1] + ' ' + courseMatch[2],
+        type: 'required',
+        grade: courseMatch[3] // Optional grade requirement
+      });
+    }
+  }
+  
   return prerequisites;
 }
 
-export async function syncPrerequisites(course: Course) {
-  try {
-    const prerequisites = extractPrerequisites(course.description);
-    
-    // 과목의 prerequisites 필드 업데이트
-    await prisma.course.update({
-      where: { id: course.id },
-      data: {
-        prerequisites: prerequisites.map(p => p.courseId)
+export function getPrerequisiteChain(course: Course, allCourses: Course[]): Course[] {
+  const chain: Course[] = [];
+  const visited = new Set<string>();
+
+  function traverse(currentCourse: Course) {
+    if (visited.has(currentCourse.code)) return;
+    visited.add(currentCourse.code);
+    chain.push(currentCourse);
+
+    for (const prereq of currentCourse.prerequisites) {
+      const prereqCourse = allCourses.find(c => c.code === prereq.courseId);
+      if (prereqCourse) {
+        traverse(prereqCourse);
       }
-    });
-
-    // 선수과목들이 DB에 존재하는지 확인하고 없으면 생성
-    for (const prereq of prerequisites) {
-      await prisma.course.upsert({
-        where: { code: prereq.courseId },
-        create: {
-          id: `temp-${prereq.courseId}`,
-          code: prereq.courseId,
-          name: `Temporary ${prereq.courseId}`,
-          description: 'Temporary prerequisite course',
-          credits: 3,
-          department: prereq.courseId.split(' ')[0],
-          level: prereq.courseId.split(' ')[1].substring(0, 1) + '00',
-          prerequisites: [],
-          term: ['Fall', 'Spring'],
-          gradeDistribution: '{}'
-        },
-        update: {}
-      });
     }
-
-    return prerequisites;
-  } catch (error) {
-    console.error('Error syncing prerequisites:', error);
-    return [];
   }
+
+  traverse(course);
+  return chain;
 }
 
-export async function validatePrerequisites(
-  courseId: string,
-  completedCourseIds: string[]
-): Promise<{ isValid: boolean; missingPrerequisites: string[] }> {
-  try {
-    const course = await prisma.course.findUnique({
-      where: { id: courseId }
-    });
+export function checkCircularDependencies(courses: Course[]): boolean {
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
 
-    if (!course) {
-      throw new Error('Course not found');
+  function dfs(courseCode: string): boolean {
+    if (recursionStack.has(courseCode)) {
+      return true;
     }
 
-    const missingPrerequisites = course.prerequisites
-      .filter(prereqId => !completedCourseIds.includes(prereqId));
+    if (visited.has(courseCode)) {
+      return false;
+    }
 
-    return {
-      isValid: missingPrerequisites.length === 0,
-      missingPrerequisites
-    };
-  } catch (error) {
-    console.error('Error validating prerequisites:', error);
-    return { isValid: false, missingPrerequisites: [] };
+    visited.add(courseCode);
+    recursionStack.add(courseCode);
+
+    const course = courses.find(c => c.code === courseCode);
+    if (course) {
+      for (const prereq of course.prerequisites) {
+        if (dfs(prereq.courseId)) {
+          return true;
+        }
+      }
+    }
+
+    recursionStack.delete(courseCode);
+    return false;
   }
+
+  return courses.some(course => dfs(course.code));
+}
+
+export function calculateRequiredTerms(
+  targetCourse: Course,
+  allCourses: Course[]
+): number {
+  const visited = new Set<string>();
+  const dp = new Map<string, number>();
+
+  function dfs(courseCode: string): number {
+    if (dp.has(courseCode)) {
+      return dp.get(courseCode)!;
+    }
+
+    visited.add(courseCode);
+    let maxPrereqTerms = 0;
+
+    const course = allCourses.find(c => c.code === courseCode);
+    if (course) {
+      for (const prereq of course.prerequisites) {
+        if (!visited.has(prereq.courseId)) {
+          maxPrereqTerms = Math.max(maxPrereqTerms, dfs(prereq.courseId));
+        }
+      }
+    }
+
+    const terms = maxPrereqTerms + 1;
+    dp.set(courseCode, terms);
+    return terms;
+  }
+
+  return dfs(targetCourse.code);
 }
