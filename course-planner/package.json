@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "sync": "ts-node -P tsconfig.json scripts/sync-courses.ts",
-    "seed": "node --loader ts-node/esm prisma/seed.ts",
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "dev": "next dev",                 
+    "build": "next build",             
+    "start": "next start",             
+    "lint": "next lint",               
+    "sync": "ts-node -P tsconfig.json scripts/sync-courses.ts", 
+    "seed": "node --loader ts-node/esm prisma/seed.ts",         
+    "test": "jest",                   
+    "test:watch": "jest --watch"       
   },
+
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@prisma/client": "^5.8.1",

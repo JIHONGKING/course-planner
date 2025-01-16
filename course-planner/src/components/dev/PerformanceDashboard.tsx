@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Activity, AlertTriangle, RefreshCw, Trash2, Clock } from 'lucide-react';
+import { Activity, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { PerformanceMetrics } from '@/types/performance';
 import { AlertPanel } from '../performance/AlertPanel';
 import { FilterControls } from '../performance/FilterControls';
 import { ExportControls } from '../performance/ExportControls';
-import { MemoryMonitor } from '@/performance/MemoryMonitor';
+import MemoryMonitorComponent from '@/components/dev/MemoryMonitorComponent';
 
 interface PerformanceDashboardProps {
   metrics?: PerformanceMetrics;
@@ -19,12 +19,18 @@ interface PerformanceDashboardProps {
 }
 
 export default function PerformanceDashboard({
-  metrics,
+  metrics = { 
+    operations: {}, 
+    totalOperations: 0, 
+    totalDuration: 0, 
+    slowOperations: [] // 기본값 추가
+  },
   isRefreshing = false,
   onRefresh,
   onClear,
-  onToggleRefresh
+  onToggleRefresh,
 }: PerformanceDashboardProps) {
+
   return (
     <div className="p-6 space-y-6 bg-gray-50">
       <Tabs defaultValue="overview">
@@ -40,8 +46,8 @@ export default function PerformanceDashboard({
               <button
                 onClick={onToggleRefresh}
                 className={`p-2 rounded-lg transition-colors ${
-                  isRefreshing 
-                    ? 'bg-blue-100 text-blue-600' 
+                  isRefreshing
+                    ? 'bg-blue-100 text-blue-600'
                     : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
                 }`}
                 title={isRefreshing ? 'Stop auto refresh' : 'Start auto refresh'}
@@ -66,7 +72,6 @@ export default function PerformanceDashboard({
           <AlertPanel />
           {metrics && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Performance metrics 표시 */}
               {Object.entries(metrics.operations || {}).map(([key, value]) => (
                 <Card key={key}>
                   <CardContent>
@@ -82,11 +87,11 @@ export default function PerformanceDashboard({
         </TabsContent>
 
         <TabsContent value="memory">
-          <MemoryMonitor />
+          <MemoryMonitorComponent />
         </TabsContent>
 
         <TabsContent value="export">
-          <ExportControls data={metrics || {}} />
+          <ExportControls data={metrics} />
         </TabsContent>
       </Tabs>
     </div>

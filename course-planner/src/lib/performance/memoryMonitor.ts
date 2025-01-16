@@ -1,6 +1,5 @@
 // src/lib/performance/memoryMonitor.ts
 
-// 타입 선언
 declare global {
   interface Performance {
     memory?: {
@@ -110,13 +109,6 @@ export class MemoryMonitor {
     return [...this.memoryLeaks];
   }
 
-  public static formatBytes(bytes: number): string {
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    if (bytes === 0) return '0 Bytes';
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
-  }
-
   private collectMemoryStats(): void {
     if (!this.isMemoryAPIAvailable()) {
       console.warn('Memory API is not available in this environment');
@@ -168,24 +160,10 @@ export class MemoryMonitor {
 
     const usageRatio = stats.usedJSHeapSize / stats.jsHeapSize;
     if (usageRatio >= this.thresholds.critical) {
-      this.handleCriticalMemoryUsage(stats);
+      console.error('Critical memory usage detected:', stats);
     } else if (usageRatio >= this.thresholds.warning) {
-      this.handleWarningMemoryUsage(stats);
+      console.warn('High memory usage detected:', stats);
     }
-  }
-
-  private handleCriticalMemoryUsage(stats: MemoryStats): void {
-    console.error('Critical memory usage detected:', {
-      used: MemoryMonitor.formatBytes(stats.usedJSHeapSize),
-      total: MemoryMonitor.formatBytes(stats.jsHeapSize),
-    });
-  }
-
-  private handleWarningMemoryUsage(stats: MemoryStats): void {
-    console.warn('High memory usage detected:', {
-      used: MemoryMonitor.formatBytes(stats.usedJSHeapSize),
-      total: MemoryMonitor.formatBytes(stats.jsHeapSize),
-    });
   }
 
   private notifySubscribers(): void {
@@ -200,12 +178,12 @@ export class MemoryMonitor {
   }
 
   private isMemoryAPIAvailable(): boolean {
-    return typeof performance !== 'undefined' && 'memory' in performance;
+    return typeof performance !== 'undefined' && performance.memory !== undefined;
   }
 
   private cleanup(): void {
     const now = Date.now();
-    const OLD_STATS_THRESHOLD = 3600000; // 1 hour
+    const OLD_STATS_THRESHOLD = 3600000;
 
     this.memoryStats = this.memoryStats.filter(
       (stat) => now - stat.timestamp < OLD_STATS_THRESHOLD
