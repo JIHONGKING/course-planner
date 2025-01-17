@@ -1,5 +1,7 @@
 // src/lib/cache/OptimizedCacheManager.ts
 
+import type { Course } from '@/types/course';
+
 interface CacheOptions {
   maxSize?: number;       // 최대 캐시 크기 (bytes)
   ttl?: number;          // Time To Live (milliseconds)
@@ -55,7 +57,7 @@ export class OptimizedCacheManager<T> {
     this.currentSize += size;
   }
 
-  get(key: string): T | null {
+  async get(key: string): Promise<T | null> {
     const item = this.cache.get(key);
     if (!item) return null;
 
@@ -125,6 +127,22 @@ export class OptimizedCacheManager<T> {
     return hitRate / item.size; // 높은 점수 = 보존 가치 높음
   }
 
+  async evictIfNeeded(requiredSize: number): Promise<void> {
+    let currentSize = Array.from(this.cache.values())
+      .reduce((sum, item) => sum + item.size, 0);
+
+    while (currentSize + requiredSize > this.maxSize && this.cache.size > 0) {
+      const oldestKey = Array.from(this.cache.entries())
+        .sort(([, a], [, b]) => a.lastAccessed - b.lastAccessed)[0][0];
+
+      const evictedItem = this.cache.get(oldestKey);
+      if (evictedItem) {
+        currentSize -= evictedItem.size;
+        this.cache.delete(oldestKey);
+      }
+    }
+  }
+
   getStats() {
     return {
       itemCount: this.cache.size,
@@ -134,3 +152,10 @@ export class OptimizedCacheManager<T> {
     };
   }
 }
+
+export const courseCache = new OptimizedCacheManager<Course>();
+export const performanceCache = new OptimizedCacheManager<any>();
+export const apiCache = new OptimizedCacheManager<any>({
+  maxSize: 50 * 1024 * 1024, // 50MB
+  ttl: 5 * 60 * 1000 // 5 minutes
+});

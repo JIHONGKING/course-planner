@@ -1,8 +1,8 @@
 // src/lib/madgrades.ts
 
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import type { Course, GradeDistribution, Prerequisite } from '@/types/course';
-import { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { parsePrerequisitesFromDescription, syncPrerequisitesWithDatabase } from '@/utils/prerequisiteUtils';
 
 interface MadgradesGrades {
@@ -42,6 +42,11 @@ export const DEPARTMENT_CODES: { [key: string]: string } = {
   '205': 'PHYSICS',
   '200': 'STAT'
 };
+
+function getFormattedDepartmentCode(subject: any): string {
+  const abbreviation = subject?.abbreviation || '';
+  return DEPARTMENT_CODES[abbreviation] || abbreviation;
+}
 
 export interface MadgradesCourse {
   uuid: string;
@@ -138,92 +143,6 @@ async function fetchCourseDetails(courseUuid: string) {
   }
 }
 
-export async function syncCoursesWithMadgrades() {
-  const batchSize = 50;
-  let page = 1;
-  let totalSynced = 0;
-  let hasMore = true;
-
-  try {
-    while (hasMore) {
-      console.log(`Processing page ${page}...`);
-      
-      const response = await fetch(
-        `https://api.madgrades.com/v1/courses?page=${page}&per_page=${batchSize}`,
-        {
-          headers: {
-            'Authorization': `Token token=${process.env.MADGRADES_API_TOKEN}`,
-            'Accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch courses: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      for (const course of data.results) {
-        try {
-          const details = await fetchCourseDetails(course.uuid);
-          if (!details) continue;
-
-          const grades = await getGradeDistribution(course.uuid);
-          const appCourse = convertToAppCourse(course, grades);
-          const prerequisites = parsePrerequisitesFromDescription(details.description || '');
-          appCourse.prerequisites = prerequisites;
-
-          const prismaData = convertToPrismaFormat(appCourse);
-          
-          const savedCourse = await prisma.course.upsert({
-            where: { id: course.uuid },
-            create: prismaData,
-            update: prismaData
-          });
-
-          // Convert saved course to app type and sync prerequisites
-          const appSavedCourse: Course = {
-            ...savedCourse,
-            prerequisites: prerequisites,
-            createdAt: savedCourse.createdAt.toISOString(),
-            updatedAt: savedCourse.updatedAt.toISOString(),
-            gradeDistribution: typeof savedCourse.gradeDistribution === 'string'
-              ? savedCourse.gradeDistribution
-              : JSON.stringify(savedCourse.gradeDistribution),
-            courseSchedules: []  // 이 줄을 추가
-          };
-
-          await syncPrerequisitesWithDatabase(appSavedCourse);
-          totalSynced++;
-          
-        } catch (error) {
-          console.error(`Failed to sync course ${course.uuid}:`, error);
-        }
-      }
-
-      hasMore = data.totalPages > page;
-      page++;
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    return { 
-      success: true, 
-      totalSynced,
-      message: `Successfully synced ${totalSynced} courses with prerequisites`
-    };
-
-  } catch (error) {
-    console.error('Error during course sync:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      totalSynced
-    };
-  }
-}
-
 export async function getGradeDistribution(courseUuid: string): Promise<GradeDistribution | null> {
   try {
     const response = await fetch(
@@ -299,8 +218,10 @@ export async function searchCourses(query: string): Promise<MadgradesCourse[]> {
   }
 }
 
-function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null): Course {
+async function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistribution | null): Promise<Course> {
   const deptCode = madgradesCourse.subjects[0]?.code;
+  const courseNumber = String(madgradesCourse.number).padStart(3, '0'); // Format number to 3 digits
+  
   const gradeData = grades || {
     A: '45.2',
     AB: '30.1',
@@ -313,15 +234,121 @@ function convertToAppCourse(madgradesCourse: MadgradesCourse, grades: GradeDistr
   
   return {
     id: madgradesCourse.uuid,
-    code: `${DEPARTMENT_CODES[deptCode] || deptCode} ${madgradesCourse.number}`,
+    code: `${DEPARTMENT_CODES[deptCode] || deptCode} ${courseNumber}`,
     name: madgradesCourse.name,
-    description: madgradesCourse.description || 'No description available',
+    description: madgradesCourse.description ?? 'No description available',
     credits: 3,
     department: DEPARTMENT_CODES[deptCode] || deptCode,
-    level: String(Math.floor(madgradesCourse.number / 100) * 100),
+    level: String(Math.floor(Number(courseNumber) / 100) * 100),
     prerequisites: [],
     term: ['Fall', 'Spring'],
-    gradeDistribution: JSON.stringify(gradeData),
-    courseSchedules: []  // 빈 배열로 초기화
+    gradeDistribution: typeof grades === 'string' ? grades : JSON.stringify(gradeData),
+    courseSchedules: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
+}
+
+export async function syncCoursesWithMadgrades() {
+  const batchSize = 50;
+  let page = 1;
+  let totalSynced = 0;
+  let hasMore = true;
+
+  try {
+    while (hasMore) {
+      console.log(`Processing page ${page}...`);
+      
+      const response = await fetch(
+        `https://api.madgrades.com/v1/courses?page=${page}&per_page=${batchSize}`,
+        {
+          headers: {
+            'Authorization': `Token token=${process.env.MADGRADES_API_TOKEN}`,
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch courses: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      for (const course of data.results) {
+        try {
+          const details = await fetchCourseDetails(course.uuid);
+          if (!details) continue;
+
+          const grades = await getGradeDistribution(course.uuid);
+          const appCourse = await convertToAppCourse(course, grades);
+          const prerequisites = parsePrerequisitesFromDescription(details.description || '');
+          appCourse.prerequisites = prerequisites;
+
+          const prismaCreateInput: Prisma.CourseCreateInput = {
+            id: appCourse.id,
+            code: appCourse.code,
+            name: appCourse.name,
+            description: appCourse.description,
+            credits: appCourse.credits,
+            department: appCourse.department,
+            level: appCourse.level,
+            prerequisites: prerequisites.map(p => p.courseId),
+            term: appCourse.term,
+            gradeDistribution: typeof appCourse.gradeDistribution === 'string' 
+              ? appCourse.gradeDistribution as Prisma.InputJsonValue
+              : JSON.stringify(appCourse.gradeDistribution) as Prisma.InputJsonValue,
+            courseSchedules: {
+              create: []
+            }
+          };
+          
+          const savedCourse = await prisma.course.upsert({
+            where: { id: course.uuid },
+            create: prismaCreateInput,
+            update: prismaCreateInput,
+            include: {
+              courseSchedules: true
+            }
+          });
+
+          await syncPrerequisitesWithDatabase({
+            ...savedCourse,
+            prerequisites,
+            courseSchedules: [],
+            description: savedCourse.description ?? 'No description available',
+            gradeDistribution: typeof savedCourse.gradeDistribution === 'string'
+              ? savedCourse.gradeDistribution
+              : JSON.stringify(savedCourse.gradeDistribution),
+            createdAt: savedCourse.createdAt.toISOString(),
+            updatedAt: savedCourse.updatedAt.toISOString()
+          });
+          
+          totalSynced++;
+          
+        } catch (error) {
+          console.error(`Failed to sync course ${course.uuid}:`, error);
+        }
+      }
+
+      hasMore = data.totalPages > page;
+      page++;
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    return { 
+      success: true, 
+      totalSynced,
+      message: `Successfully synced ${totalSynced} courses with prerequisites`
+    };
+
+  } catch (error) {
+    console.error('Error during course sync:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      totalSynced
+    };
+  }
 }

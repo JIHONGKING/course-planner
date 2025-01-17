@@ -1,5 +1,5 @@
 // src/lib/search.ts
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { searchCourses as searchMadgrades } from './madgrades';
 import type { Course } from '@/types/course';
 import { Prisma } from '@prisma/client';

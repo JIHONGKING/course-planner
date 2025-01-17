@@ -14,40 +14,44 @@ export const sampleCourses: Course[] = [
     term: ['Fall', 'Spring'],
     courseSchedules: [
       {
+        id: 'cs300-mon',
         dayOfWeek: 'MON',
         startTime: '09:00',
         endTime: '09:50',
+        courseId: 'cs300'
       },
       {
+        id: 'cs300-wed',
         dayOfWeek: 'WED',
         startTime: '09:00',
         endTime: '09:50',
+        courseId: 'cs300'
       }
     ],
     gradeDistribution: JSON.stringify({
-      A: 45.2,
-      AB: 30.1,
-      B: 15.3,
-      BC: 5.2,
-      C: 2.1,
-      D: 1.1,
-      F: 1.0
+      A: '45.2',
+      AB: '30.1',
+      B: '15.3',
+      BC: '5.2',
+      C: '2.1',
+      D: '1.1',
+      F: '1.0'
     }),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
-  },
-  // 다른 샘플 코스들...
+  }
 ];
 
-export const generateMoreCourses = (): Course[] => {
+export function generateMoreCourses(): Course[] {
   const departments = ['COMP SCI', 'MATH', 'STAT', 'ECE'];
   const courses: Course[] = [...sampleCourses];
 
   departments.forEach((dept, deptIndex) => {
     for (let i = 1; i <= 5; i++) {
       const courseNumber = 300 + i * 50 + deptIndex * 10;
+      const courseId = `${dept.toLowerCase()}-${courseNumber}`;
       courses.push({
-        id: `${dept.toLowerCase()}-${courseNumber}`,
+        id: courseId,
         code: `${dept} ${courseNumber}`,
         name: `Sample ${dept} Course ${i}`,
         description: `This is a sample ${dept} course description`,
@@ -58,19 +62,21 @@ export const generateMoreCourses = (): Course[] => {
         term: ['Fall', 'Spring'],
         courseSchedules: [
           {
+            id: `${courseId}-mon`,
             dayOfWeek: 'MON',
             startTime: '09:00',
             endTime: '09:50',
+            courseId: courseId
           }
         ],
         gradeDistribution: JSON.stringify({
-          A: 40 + Math.random() * 20,
-          AB: 25 + Math.random() * 15,
-          B: 15 + Math.random() * 10,
-          BC: 5 + Math.random() * 5,
-          C: 2 + Math.random() * 3,
-          D: 1 + Math.random() * 2,
-          F: Math.random() * 2
+          A: String(40 + Math.random() * 20),
+          AB: String(25 + Math.random() * 15),
+          B: String(15 + Math.random() * 10),
+          BC: String(5 + Math.random() * 5),
+          C: String(2 + Math.random() * 3),
+          D: String(1 + Math.random() * 2),
+          F: String(Math.random() * 2)
         }),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -79,4 +85,4 @@ export const generateMoreCourses = (): Course[] => {
   });
 
   return courses;
-};
+}

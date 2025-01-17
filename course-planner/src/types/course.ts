@@ -21,16 +21,18 @@ export interface Course {
   term: string[];
   gradeDistribution: string | GradeDistribution;
   courseSchedules: CourseSchedule[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  semesterId?: string;
 }
 
 export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
 
 export interface CourseSchedule {
-  id: string;
+  id?: string;
   dayOfWeek: DayOfWeek;
   startTime: string;
+  courseId?: string;
   endTime: string;
 }
 
@@ -38,6 +40,27 @@ export interface Prerequisite {
   courseId: string;
   type: 'required' | 'concurrent' | 'recommended';
   grade?: string;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  conflicts: {
+    course1: Course;
+    course2: Course;
+    overlappingSlots: {
+      slot1: CourseSchedule;
+      slot2: CourseSchedule;
+    };
+  }[];
+  messages: string[];
+  totalCredits: number;
+}
+
+
+export interface Schedule {
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
 }
 
 export interface AcademicYear {

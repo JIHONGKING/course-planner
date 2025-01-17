@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 // CourseSchedule 타입을 Prisma 스키마와 일치하도록 수정
 export type PrismaCourseSchedule = {
@@ -33,3 +34,19 @@ export const includeCourseRelations = {
   courseSchedules: true,
   metadata: true
 } as const;
+
+
+declare global {
+  var prisma: PrismaClient | undefined;
+}
+
+const prisma = global.prisma || new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+});
+
+if (process.env.NODE_ENV !== 'production') {
+  global.prisma = prisma;
+}
+
+export { prisma };
+export default prisma;

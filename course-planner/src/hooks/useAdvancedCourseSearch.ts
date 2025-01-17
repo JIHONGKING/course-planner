@@ -2,15 +2,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useDebounce } from './useDebounce';
-import { courseCache } from '@/lib/cache';
+import { CacheService } from '@/lib/cache/CacheService';
 import type { Course } from '@/types/course';
-import { sortCourses, type SortOption } from '@/utils/sortUtils';
-
-interface CacheEntry {
-  courses: Course[];
-  total: number;
-  timestamp: number;
-}
+import type { SortOption } from '@/utils/sortUtils';
 
 export interface SearchFilters {
   department?: string;
@@ -32,7 +26,11 @@ export interface SearchOptions {
 }
 
 export function useAdvancedCourseSearch(initialOptions?: Partial<SearchOptions>) {
-  const [searchTerm, setSearchTerm] = useState('');
+  // 상태 관리
+  const [searchQuery, setSearchQuery] = useState('');
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [options, setOptions] = useState<SearchOptions>({
     filters: {},
     sort: {
@@ -44,77 +42,68 @@ export function useAdvancedCourseSearch(initialOptions?: Partial<SearchOptions>)
     ...initialOptions
   });
 
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [totalResults, setTotalResults] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedSearchTerm = useDebounce(searchQuery, 300);
+  const cacheService = CacheService.getInstance();
 
   const searchCourses = useCallback(async () => {
     if (!debouncedSearchTerm.trim()) {
       setCourses([]);
-      setTotalResults(0);
       return;
     }
 
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
-      // First try to get from cache
-      const cacheKey = `search:${debouncedSearchTerm}:${JSON.stringify(options)}`;
-      const cached = courseCache.get<CacheEntry>(cacheKey);
+      // 캐시 확인
+      const cacheKey = `${debouncedSearchTerm}:${JSON.stringify(options)}`;
+      const cached = await cacheService.getCachedSearchResults(cacheKey);
 
       if (cached) {
         setCourses(cached.courses);
-        setTotalResults(cached.total);
-        setLoading(false);
+        setIsLoading(false);
         return;
       }
 
-      // Build query parameters
-      const queryParams = new URLSearchParams({
+      // 쿼리 파라미터 구성
+      const params = new URLSearchParams({
         query: debouncedSearchTerm,
-        page: options.page.toString(),
-        limit: options.limit.toString(),
+        page: String(options.page),
+        limit: String(options.limit),
         sortBy: options.sort.by,
         sortOrder: options.sort.order
       });
 
-      // Add filter parameters
-      if (options.filters.department) queryParams.append('department', options.filters.department);
-      if (options.filters.level) queryParams.append('level', options.filters.level);
-      if (options.filters.credits) queryParams.append('credits', options.filters.credits.toString());
-      if (options.filters.term?.length) options.filters.term.forEach(t => queryParams.append('term', t));
-      if (options.filters.minimumGrade) queryParams.append('minGrade', options.filters.minimumGrade.toString());
-      if (options.filters.maximumWorkload) queryParams.append('maxWorkload', options.filters.maximumWorkload.toString());
+      // 필터 추가
+      Object.entries(options.filters).forEach(([key, value]) => {
+        if (value !== undefined) {
+          if (Array.isArray(value)) {
+            value.forEach(v => params.append(key, v));
+          } else {
+            params.append(key, String(value));
+          }
+        }
+      });
 
-      const response = await fetch(`/api/courses/search?${queryParams}`);
+      const response = await fetch(`/api/courses/search?${params}`);
       if (!response.ok) {
         throw new Error('Failed to fetch courses');
       }
 
       const data = await response.json();
       
-      // Cache the results
-      courseCache.set(cacheKey, {
-        courses: data.courses,
-        total: data.total,
-        timestamp: Date.now()
-      });
+      // 결과 캐싱
+      await cacheService.setCachedSearchResults(cacheKey, data);
 
       setCourses(data.courses);
-      setTotalResults(data.total);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('An error occurred'));
-      setCourses([]);
-      setTotalResults(0);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [debouncedSearchTerm, options]);
+  }, [debouncedSearchTerm, options, cacheService]);
 
+  // 검색어 변경 시 자동 검색
   useEffect(() => {
     searchCourses();
   }, [debouncedSearchTerm, options, searchCourses]);
@@ -126,7 +115,7 @@ export function useAdvancedCourseSearch(initialOptions?: Partial<SearchOptions>)
         ...prev.filters,
         ...newFilters
       },
-      page: 1 // Reset page when filters change
+      page: 1 // 필터 변경 시 첫 페이지로 리셋
     }));
   }, []);
 
@@ -151,16 +140,14 @@ export function useAdvancedCourseSearch(initialOptions?: Partial<SearchOptions>)
   }, []);
 
   return {
-    searchTerm,
-    setSearchTerm,
     courses,
-    totalResults,
-    loading,
+    isLoading,
     error,
+    searchQuery,
+    setSearchQuery,
     filters: options.filters,
     sort: options.sort,
     page: options.page,
-    totalPages: Math.ceil(totalResults / options.limit),
     updateFilters,
     updateSort,
     setPage

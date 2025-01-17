@@ -1,6 +1,6 @@
 // src/lib/api/cachedApi.ts
 
-import { apiCache } from '@/lib/cache/CacheManager';  // 경로 수정
+import { apiCache } from '@/lib/cache/OptimizedCacheManager';  // 경로 수정
 
 interface CachedRequestConfig extends RequestInit {
   ttl?: number;
@@ -21,9 +21,9 @@ export async function cachedFetch<T>(
 
   // 캐시 확인 (skipCache가 false일 때)
   if (!skipCache) {
-    const cached = apiCache.get(cacheKey); // 타입 인자 제거
+    const cached = apiCache.get(cacheKey); 
     if (cached) {
-      return cached;
+      return cached; // 불필요한 타입 단언 제거
     }
   }
 
@@ -37,7 +37,7 @@ export async function cachedFetch<T>(
 
   // 캐시 저장 (skipCache가 false일 때)
   if (!skipCache) {
-    apiCache.set(cacheKey, data, ttl);
+    await apiCache.set(cacheKey, data, { ttl });
   }
 
   return data as T;
@@ -75,7 +75,7 @@ export const cachedPerformanceApi = {
   async getMetrics() {
     return cachedFetch('/api/metrics', {
       ttl: 60 * 1000, // 1 minute
-      skipCache: false
+      skipCache: false 
     });
   },
 
