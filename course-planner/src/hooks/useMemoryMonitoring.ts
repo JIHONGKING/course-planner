@@ -1,5 +1,4 @@
 // src/hooks/useMemoryMonitoring.ts
-
 import { useState, useEffect, useCallback } from 'react';
 import { MemoryMonitor, MemoryStats } from '@/lib/performance/memoryMonitor';
 
@@ -7,6 +6,7 @@ interface UseMemoryMonitoringOptions {
   onLeak?: (leak: any) => void;
   warningThreshold?: number;  // percentage of heap size (0-100)
   monitoringInterval?: number;  // milliseconds
+  componentName?: string;
 }
 
 export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
@@ -16,6 +16,25 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
 
   const monitor = MemoryMonitor.getInstance();
 
+  const trackOperation = useCallback(async <T>(
+    name: string,
+    category: 'api' | 'computation' | 'io',
+    operation: () => Promise<T>
+  ): Promise<T> => {
+    const startTime = performance.now();
+    try {
+      return await operation();
+    } finally {
+      const duration = performance.now() - startTime;
+      monitor.collectStats({
+        name: options.componentName ? `${options.componentName}.${name}` : name,
+        duration,
+        category,
+        timestamp: Date.now()
+      });
+    }
+  }, [options.componentName]);
+
   useEffect(() => {
     const handleMemoryLeak = (event: CustomEvent) => {
       const leak = event.detail;
@@ -23,7 +42,6 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
       options.onLeak?.(leak);
     };
 
-    // 메모리 누수 이벤트 리스너 등록
     window.addEventListener('memory-leak', handleMemoryLeak as EventListener);
 
     return () => {
@@ -33,7 +51,6 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
 
   const startMonitoring = useCallback(() => {
     setIsMonitoring(true);
-    // 모니터링 시작 시 기존 통계 가져오기
     setMemoryStats(monitor.getMemoryStats());
   }, []);
 
@@ -62,6 +79,7 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
     isMonitoring,
     startMonitoring,
     stopMonitoring,
-    clearLeaks
+    clearLeaks,
+    trackOperation
   };
 }

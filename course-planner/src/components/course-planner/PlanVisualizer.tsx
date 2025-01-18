@@ -1,7 +1,7 @@
 // src/components/course-planner/PlanVisualizer.tsx
 import React from 'react';
 import type { AcademicPlan, Course } from '@/types/course';
-import { PlanGenerator } from '@/lib/planGenerator';
+import { OptimizedPlanGenerator } from '@/lib/planGenerator/OptimizedPlanGenerator'; // 경로 수정
 
 interface PlanVisualizerProps {
   courses: Course[];
@@ -12,28 +12,27 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
   const [preferences, setPreferences] = React.useState({
     prioritizeGrades: true,
     balanceWorkload: true,
-    includeRequirements: true
+    includeRequirements: true,
   });
 
   const [plan, setPlan] = React.useState<AcademicPlan | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const generatePlan = async () => {
-    const generator = new PlanGenerator();
+    setLoading(true);
+    setError(null);
+
     try {
-      const newPlan = generator.generatePlan(
-        courses,
-        preferences,
-        {
-          maxCreditsPerSemester: 15,
-          requiredCourses: [],
-          preferredTerms: {}
-        }
-      );
+      const generator = new OptimizedPlanGenerator(courses);
+      const newPlan = await generator.generateOptimalPlan(preferences);
       setPlan(newPlan);
       onPlanGenerated?.(newPlan);
     } catch (error) {
       console.error('Failed to generate plan:', error);
-      // TODO: 에러 처리
+      setError('Failed to generate the academic plan. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -41,16 +40,18 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Plan Preferences</h2>
-        
+
         <div className="space-y-4">
           <label className="flex items-center space-x-2">
             <input
               type="checkbox"
               checked={preferences.prioritizeGrades}
-              onChange={(e) => setPreferences(prev => ({
-                ...prev,
-                prioritizeGrades: e.target.checked
-              }))}
+              onChange={(e) =>
+                setPreferences((prev) => ({
+                  ...prev,
+                  prioritizeGrades: e.target.checked,
+                }))
+              }
               className="rounded border-gray-300"
             />
             <span>Prioritize High Grades</span>
@@ -60,10 +61,12 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
             <input
               type="checkbox"
               checked={preferences.balanceWorkload}
-              onChange={(e) => setPreferences(prev => ({
-                ...prev,
-                balanceWorkload: e.target.checked
-              }))}
+              onChange={(e) =>
+                setPreferences((prev) => ({
+                  ...prev,
+                  balanceWorkload: e.target.checked,
+                }))
+              }
               className="rounded border-gray-300"
             />
             <span>Balance Workload</span>
@@ -73,10 +76,12 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
             <input
               type="checkbox"
               checked={preferences.includeRequirements}
-              onChange={(e) => setPreferences(prev => ({
-                ...prev,
-                includeRequirements: e.target.checked
-              }))}
+              onChange={(e) =>
+                setPreferences((prev) => ({
+                  ...prev,
+                  includeRequirements: e.target.checked,
+                }))
+              }
               className="rounded border-gray-300"
             />
             <span>Include Requirements</span>
@@ -86,9 +91,12 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
         <button
           onClick={generatePlan}
           className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          disabled={loading}
         >
-          Generate Plan
+          {loading ? 'Generating...' : 'Generate Plan'}
         </button>
+
+        {error && <div className="mt-4 text-red-500">{error}</div>}
       </div>
 
       {plan && (
@@ -109,7 +117,10 @@ export function PlanVisualizer({ courses, onPlanGenerated }: PlanVisualizerProps
                       ))}
                     </ul>
                     <div className="mt-2 text-sm text-gray-500">
-                      Total Credits: {semester.courses.reduce((sum, c) => sum + c.credits, 0)}
+                      Total Credits: {semester.courses.reduce(
+                        (sum, c) => sum + c.credits,
+                        0
+                      )}
                     </div>
                   </div>
                 ))}

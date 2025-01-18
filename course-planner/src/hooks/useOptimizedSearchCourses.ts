@@ -13,6 +13,7 @@ export interface SearchOptions {
   cacheResults?: boolean;
 }
 
+
 export function useOptimizedSearchCourses(options: SearchOptions = {}) {
   const {
     initialQuery = '',

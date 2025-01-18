@@ -6,8 +6,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Search, Filter, AlertCircle } from 'lucide-react';
 import type { Course } from '@/types/course';
 import { usePlanner } from '@/hooks/usePlanner';
-import { useSearchCourses } from '@/hooks/useSearchCourses';
-import { usePerformanceMonitoring } from '@/hooks/usePerformance';
+import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';
+import { useMemoryMonitoring } from '@/hooks/useMemoryMonitoring';
 import DraggableCourseCard from '@/components/common/DraggableCourseCard';
 import CourseSearchResults from '@/components/course/CourseSearchResults';
 import YearPlanner from '../course-planner/YearPlanner';  // 경로 수정
@@ -18,22 +18,32 @@ export default function CoursePlanner() {
   const [showFilters, setShowFilters] = useState(false);
   const [draggedCourse, setDraggedCourse] = useState<Course | null>(null);
 
-  const { courses, searchCourses, isLoading } = useSearchCourses();
+  const { courses, searchCourses, isLoading } = useOptimizedSearchCourses();
   const { academicPlan, addCourse, moveCourse } = usePlanner();
-  const { trackOperation } = usePerformanceMonitoring('CoursePlanner');
+  const { trackOperation } = useMemoryMonitoring({
+    componentName: 'CoursePlanner',
+    monitoringInterval: 3000, 
+    warningThreshold: 80,
+    onLeak: (leak) => {
+      console.warn('Memory leak detected:', leak);
+    }
+  });
+
 
   // 향상된 드래그 앤 드롭 핸들러
   const handleDragStart = useCallback((course: Course) => {
     setDraggedCourse(course);
-    // 드래그 시작 시 시각적 피드백
     document.body.style.cursor = 'grabbing';
   }, []);
+
+    
 
   const handleDragEnd = useCallback(() => {
     setDraggedCourse(null);
     // 드래그 종료 시 커서 복원
     document.body.style.cursor = 'default';
   }, []);
+
 
   const handleDrop = useCallback((courseId: string, targetSemesterId: string) => {
     trackOperation(

@@ -42,7 +42,7 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   try {
-    const schedules = await prisma.courseSchedules.findMany({
+    const schedules = await prisma.courseSchedule.findMany({
       where: { 
         courseId: params.courseId 
       },
@@ -80,13 +80,13 @@ export async function PUT(
 
     const result = await prisma.$transaction(async (tx) => {
       // 기존 스케줄 삭제
-      await tx.courseSchedules.deleteMany({
+      await tx.courseSchedule.deleteMany({
         where: { courseId }
       });
 
       if (scheduleData.length > 0) {
         // 새 스케줄 생성
-        await tx.courseSchedules.createMany({
+        await tx.courseSchedule.createMany({
           data: scheduleData.map(slot => ({
             courseId,
             dayOfWeek: slot.dayOfWeek,
@@ -97,7 +97,7 @@ export async function PUT(
       }
 
       // 업데이트된 스케줄 조회
-      return await tx.courseSchedules.findMany({
+      return await tx.courseSchedule.findMany({
         where: { courseId },
         select: {
           id: true,
@@ -143,7 +143,7 @@ export async function DELETE(
   const { courseId } = params;
 
   try {
-    await prisma.courseSchedules.deleteMany({
+    await prisma.courseSchedule.deleteMany({
       where: { courseId }
     });
 

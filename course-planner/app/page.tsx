@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { Wand2, ChevronDown, X, Plus, Trash2, Search, Info } from 'lucide-react';
-import { useCourses } from '@/hooks/useCourses';
+import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses'; 
 import { usePlanner } from '@/hooks/usePlanner';
 import { usePrerequisiteValidation } from '@/hooks/usePrerequisiteValidation';
 import type { Course, GradeDistribution } from '@/types/course';
@@ -38,7 +38,7 @@ export default function Home() {
   const [isPlanGenerated, setIsPlanGenerated] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('grade');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const { courses, isLoading, error, searchCourses } = useCourses();
+  const { courses, isLoading, error, searchCourses } = useOptimizedSearchCourses();
   const {
     savedCourses,
     selectedYear,

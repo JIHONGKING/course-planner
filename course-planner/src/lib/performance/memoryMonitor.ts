@@ -83,7 +83,10 @@ export class MemoryMonitor {
     }
   }
 
-  public subscribe(id: string, callback: (data: MemoryUsageData) => void): () => void {
+  public subscribe(
+    id: string,
+    callback: (data: MemoryUsageData) => void
+  ): () => void {
     this.subscribers.set(id, callback);
     const currentData = this.getCurrentData();
     callback(currentData);
@@ -132,14 +135,15 @@ export class MemoryMonitor {
     const recentStats = this.memoryStats.slice(-5);
     if (recentStats.length < 5) return;
 
-    // 증가율 기반 탐지로 개선
-    const growthRates = recentStats.slice(1).map((stat, index) =>
-      (stat.usedJSHeapSize - recentStats[index].usedJSHeapSize) / recentStats[index].usedJSHeapSize
+    const growthRates = recentStats.slice(1).map(
+      (stat, index) =>
+        (stat.usedJSHeapSize - recentStats[index].usedJSHeapSize) /
+        recentStats[index].usedJSHeapSize
     );
-    const averageGrowthRate = growthRates.reduce((a, b) => a + b, 0) / growthRates.length;
-    const isAbnormalGrowth = averageGrowthRate > 0.1; // 10% 이상 증가율을 비정상으로 간주
+    const averageGrowthRate =
+      growthRates.reduce((a, b) => a + b, 0) / growthRates.length;
 
-    if (isAbnormalGrowth) {
+    if (averageGrowthRate > 0.1) {
       const leak: MemoryLeak = {
         id: `leak-${Date.now()}`,
         type: 'abnormal-growth-rate',
@@ -172,7 +176,6 @@ export class MemoryMonitor {
       try {
         callback(currentData);
       } catch (error) {
-        // 콜백 실행 실패 시 구독 제거
         this.subscribers.delete(id);
         console.warn(`Removing inactive subscriber: ${id}`);
       }
