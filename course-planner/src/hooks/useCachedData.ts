@@ -1,7 +1,7 @@
 // src/hooks/useCachedData.ts
 
 import { useState, useEffect, useCallback } from 'react';
-import { courseCache, performanceCache } from '@/lib/cache/CacheManager';
+import { courseCache, performanceCache } from '@/lib/cache/OptimizedCacheManager';
 import { cachedCourseApi, cachedPerformanceApi } from '@/lib/api/cachedApi';
 import type { Course } from '@/types/course';
 import type { SearchCoursesResponse, MetricsResponse } from '@/types/api';

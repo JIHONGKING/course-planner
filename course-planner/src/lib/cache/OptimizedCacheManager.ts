@@ -143,6 +143,14 @@ export class OptimizedCacheManager<T> {
     }
   }
 
+  public clearPattern(pattern: RegExp): void {
+    for (const key of this.cache.keys()) {
+      if (pattern.test(key)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
   getStats() {
     return {
       itemCount: this.cache.size,

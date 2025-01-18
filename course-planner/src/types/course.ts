@@ -9,6 +9,21 @@ export interface GradeDistribution {
   F: string;
 }
 
+export interface SemesterCourse extends Course {
+  semesterId: string;
+}
+
+export interface ScheduleConflict {
+  course1: Course;
+  course2: Course;
+  overlappingSlots: {
+    slot1: CourseSchedule; 
+    slot2: CourseSchedule;
+  };
+}
+
+
+
 export interface Course {
   id: string;
   code: string;

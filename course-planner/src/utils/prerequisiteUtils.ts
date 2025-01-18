@@ -2,6 +2,8 @@
 
 import type { Course, Prerequisite } from '@/types/course';
 import prisma from '@/lib/prisma';  // import prisma client properly
+import type { Prisma } from '@prisma/client';
+
 
 interface ValidationResult {
   isValid: boolean;
@@ -45,19 +47,20 @@ export async function syncPrerequisitesWithDatabase(course: Course): Promise<voi
       where: { courseId: course.id }
     });
 
-    for (const prereq of course.prerequisites) {
-      await prisma.coursePrerequisite.create({
-        data: {
-          courseId: course.id,
-          prerequisiteId: prereq.courseId,
-          type: prereq.type,
-          minGrade: prereq.grade
-        }
-      });
-    }
+    // prerequisites 데이터를 Prisma의 타입에 맞게 변환
+    const prerequisiteData = course.prerequisites.map(prereq => ({
+      courseId: course.id,
+      prerequisiteId: prereq.courseId,
+      type: prereq.type
+    }));
+
+    // createMany를 사용하여 한 번에 생성
+    await prisma.coursePrerequisite.createMany({
+      data: prerequisiteData
+    });
   } catch (error) {
     console.error('Failed to sync prerequisites:', error);
-    throw error;  // Re-throw to handle in the calling function
+    throw error;
   }
 }
 
