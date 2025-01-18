@@ -2,12 +2,12 @@
 // src/components/ui/SearchBar.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
-import { useCourses } from '@/hooks/useCourses';
+import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';  // 변경된 부분
 import debounce from 'lodash/debounce';
 
 export default function SearchBar() {
   const [searchTerm, setSearchTerm] = useState('');
-  const { searchCourses, isLoading } = useCourses();
+  const { searchCourses, isLoading } = useOptimizedSearchCourses();  // 변경된 부분
 
   // 디바운스된 검색 함수 생성
   const debouncedSearch = useCallback(

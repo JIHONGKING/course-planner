@@ -1,6 +1,6 @@
 // src/components/course-planner/CourseList.tsx
 import React, { useMemo, useCallback } from 'react';
-import { useCourses } from '@/hooks/useCourses';
+import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';  // 변경된 부분
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { SortControls } from '@/components/ui/SortControls';
@@ -19,7 +19,7 @@ const CourseList = React.memo(() => {
     handleSort,
     handleOrderChange,
     handlePageChange
-  } = useCourses();
+  } = useOptimizedSearchCourses();
 
   // GradeA 계산 함수 메모이제이션
   const getGradeA = useCallback((gradeDistribution: string | GradeDistribution): number => {
