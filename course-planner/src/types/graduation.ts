@@ -6,21 +6,28 @@ export interface RequirementCriteria {
   name: string;
   type: 'credits' | 'courses' | 'gpa' | 'distribution';
   required: number;
+  courseId?: string;
+  alternatives?: string[];
+  minimumCredits?: number;
   description?: string;
 }
+
+
 
 export interface GraduationRequirement {
   id: string;
   name: string;
-  totalCredits: number;       // 추가
-  minimumGPA: number;         // 추가
+  totalCredits: number;       
+  minimumGPA: number;         
   requiredCredits: number;
   requiredGPA: number;
   distribution: {
     [department: string]: number;
   };
-  coreCourses: CoreCourse[];  // string[] -> CoreCourse[]
+  coreCourses: CoreCourse[];
+  requirements?: RequirementType[]; // requirementTypes를 requirements로 변경
 }
+
 
 export interface CoreCourse {
   code: string;
@@ -78,8 +85,11 @@ export interface CreditRequirement extends RequirementBase {
 }
 
 export interface CourseRequirement {
+  id: string;
+  name: string;
   courseId: string;
-  required: boolean;
+  type: 'required' | 'recommended';
+  minimumCredits?: number;
   alternatives?: string[];
   minimumGrade?: string;
 }
@@ -131,7 +141,7 @@ export interface RequirementItem {
 }
 
 export interface RequirementValidationResult {
-  type: RequirementType['type'];
+  type: string;
   satisfied: boolean;
   current: number;
   required: number;
