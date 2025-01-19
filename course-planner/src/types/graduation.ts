@@ -30,10 +30,11 @@ export interface GraduationRequirement {
 
 
 export interface CoreCourse {
-  code: string;
+  code: string;       // courseId 대신 code 사용
   name: string;
   required: boolean;
 }
+
 
 
 export interface RequirementProgress {
@@ -85,11 +86,9 @@ export interface CreditRequirement extends RequirementBase {
 }
 
 export interface CourseRequirement {
-  id: string;
+  code: string;       // courseId 대신 code 사용
   name: string;
-  courseId: string;
-  type: 'required' | 'recommended';
-  minimumCredits?: number;
+  required: boolean;
   alternatives?: string[];
   minimumGrade?: string;
 }

@@ -5,7 +5,7 @@ import { useDrop } from 'react-dnd';
 import { Plus, Trash2, Info } from 'lucide-react';
 import type { Course } from '@/types/course';
 import type { DropTargetMonitor } from 'react-dnd';
-import DraggableCourseCard from '@/components/common/DraggableCourseCard';
+import DraggableCourseCard from '@/components/common/OptimizedDraggable';
 import { CREDITS_PER_SEMESTER } from '@/data/constants';
 import CourseSelectionModal from './CourseSelectionModal';
 

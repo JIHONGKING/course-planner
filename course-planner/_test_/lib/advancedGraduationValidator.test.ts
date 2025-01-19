@@ -1,6 +1,6 @@
 // __tests__/lib/advancedGraduationValidator.test.ts
 
-import { GraduationValidator } from '@/lib/graduationValidator';
+import { GraduationValidator } from '@/utils/graduationUtils';
 import type { Course, AcademicPlan, Prerequisite } from '@/types/course';
 import type { GraduationRequirement } from '@/types/graduation';
 

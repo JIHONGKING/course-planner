@@ -8,7 +8,7 @@ import type { Course } from '@/types/course';
 import { usePlanner } from '@/hooks/usePlanner';
 import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';
 import { useMemoryMonitoring } from '@/hooks/useMemoryMonitoring';
-import DraggableCourseCard from '@/components/common/DraggableCourseCard';
+import DraggableCourseCard from '@/components/common/OptimizedDraggable';
 import CourseSearchResults from '@/components/course/CourseSearchResults';
 import YearPlanner from '../course-planner/YearPlanner';  // 경로 수정
 

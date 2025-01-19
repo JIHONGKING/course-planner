@@ -1,3 +1,6 @@
+// /Users/jihong/Desktop/AutoClassfinder/course-planner/src/lib/planGenerator/OptimizedPlanGenerator.ts
+
+
 import type { Course, AcademicPlan } from '@/types/course';
 import { getGradeA } from '@/utils/gradeUtils';
 

@@ -1,160 +1,114 @@
+// src/components/course-planner/AutoPlanGenerator.tsx
 import React, { useState } from 'react';
-import { Wand2, AlertCircle } from 'lucide-react';
-import { PlanGenerator } from '@/lib/planGenerator';
-import type { Course } from '@/types/course';
+import { Wand2 } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { OptimizedPlanGenerator } from '@/lib/planGenerator/OptimizedPlanGenerator';
+import { useCourseData } from '@/hooks/useCourseData';
+import type { Course, AcademicPlan } from '@/types/course';
 
 interface AutoPlanGeneratorProps {
-  courses: Course[];
-  completedCourses: Course[];
-  onPlanGenerated: (plan: any) => void;
+  onPlanGenerated: (plan: AcademicPlan) => void;
 }
 
-export default function AutoPlanGenerator({
-  courses,
-  completedCourses,
-  onPlanGenerated
-}: AutoPlanGeneratorProps) {
+export default function AutoPlanGenerator({ onPlanGenerated }: AutoPlanGeneratorProps) {
+  const { courses } = useCourseData();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState({
     prioritizeGrades: true,
     balanceWorkload: true,
-    includeRequirements: true,
-    maxCreditsPerSemester: 15
+    includeRequirements: true
   });
 
-  const handleGenerate = async () => {
+  const handleGeneratePlan = async () => {
+    if (!courses.length) return;
+    
     setIsGenerating(true);
-    setError(null);
-  
     try {
-      const generator = new PlanGenerator();
-      const constraints = {
-        maxCreditsPerSemester: preferences.maxCreditsPerSemester,
-        requiredCourses: [],
-        preferredTerms: {}
-      };
+      // OptimizedPlanGenerator 인스턴스 생성 시 courses 전달
+      const generator = new OptimizedPlanGenerator(courses);
       
-      const plan = generator.generatePlan(
-        courses, 
-        {
-          prioritizeGrades: preferences.prioritizeGrades,
-          balanceWorkload: preferences.balanceWorkload,
-          includeRequirements: preferences.includeRequirements
-        },
-        constraints
-      );
+      // generateOptimalPlan 메서드 호출 시 preferences 전달
+      const plan = generator.generateOptimalPlan(preferences);
       
       onPlanGenerated(plan);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate plan');
+    } catch (error) {
+      console.error('Failed to generate plan:', error);
     } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
           <Wand2 className="h-5 w-5 text-blue-500" />
-          <h2 className="text-lg font-medium">자동 계획 생성</h2>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-red-500" />
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">선호도 설정</h3>
-          <div className="space-y-3">
+          Auto Plan Generator
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={preferences.prioritizeGrades}
-                onChange={(e) => setPreferences(prev => ({
+                onChange={e => setPreferences(prev => ({
                   ...prev,
                   prioritizeGrades: e.target.checked
                 }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-600">높은 A학점 비율 우선</span>
+              <span>Prioritize High Grades</span>
             </label>
-
+            
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={preferences.balanceWorkload}
-                onChange={(e) => setPreferences(prev => ({
+                onChange={e => setPreferences(prev => ({
                   ...prev,
                   balanceWorkload: e.target.checked
                 }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-600">학기별 워크로드 균형</span>
+              <span>Balance Workload</span>
             </label>
-
+            
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={preferences.includeRequirements}
-                onChange={(e) => setPreferences(prev => ({
+                onChange={e => setPreferences(prev => ({
                   ...prev,
                   includeRequirements: e.target.checked
                 }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300"
               />
-              <span className="text-sm text-gray-600">졸업 요건 고려</span>
+              <span>Include Requirements</span>
             </label>
           </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            학기당 최대 학점
-          </label>
-          <select
-            value={preferences.maxCreditsPerSemester}
-            onChange={(e) => setPreferences(prev => ({
-              ...prev,
-              maxCreditsPerSemester: parseInt(e.target.value)
-            }))}
-            className="w-full rounded-md border border-gray-300 shadow-sm py-2 pl-3 pr-10 text-gray-900 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value={12}>12학점</option>
-            <option value={15}>15학점</option>
-            <option value={18}>18학점</option>
-          </select>
-        </div>
-
-        <div className="mt-6">
           <button
-            onClick={handleGenerate}
+            onClick={handleGeneratePlan}
             disabled={isGenerating}
-            className={`w-full py-2 px-4 rounded-md text-white flex items-center justify-center gap-2
-              ${isGenerating 
-                ? 'bg-gray-400 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700'}`}
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isGenerating ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                <span>생성 중...</span>
+                Generating...
               </>
             ) : (
               <>
                 <Wand2 className="h-4 w-4" />
-                <span>계획 생성하기</span>
+                Generate Plan
               </>
             )}
           </button>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

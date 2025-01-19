@@ -8,6 +8,7 @@ import type {
 } from '@/types/graduation';
 import { getGradeA } from '@/utils/gradeUtils';
 
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;

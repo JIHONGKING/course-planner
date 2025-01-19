@@ -15,18 +15,6 @@ interface Course {
   gradeDistribution: any;
 }
 
-interface MadgradesCourse {
-  uuid: string;
-  number: number;
-  name: string;
-  subjects: Array<{
-    code: string;
-    name: string;
-  }>;
-  description?: string;
-  code?: string;
-}
-
 interface GradeDistribution {
   A: string;
   AB: string;
@@ -37,16 +25,17 @@ interface GradeDistribution {
   F: string;
 }
 
+// 선수과목 추출 함수
 async function extractPrerequisites(description: string): Promise<Array<{ courseId: string; type: 'required' }>> {
   const prerequisites = [];
   const pattern = /(?:Prerequisites?|Prereq):\s*([^.]+)/i;
   const match = description.match(pattern);
-  
+
   if (match) {
     const text = match[1].trim();
     const coursePattern = /([A-Z]+(?:\s+[A-Z]+)*)\s+(\d{3})/g;
     let courseMatch;
-    
+
     while ((courseMatch = coursePattern.exec(text)) !== null) {
       prerequisites.push({
         courseId: courseMatch[0],
@@ -54,10 +43,46 @@ async function extractPrerequisites(description: string): Promise<Array<{ course
       });
     }
   }
-  
+
   return prerequisites;
 }
 
+// 성적 분포 기본값 생성 함수
+function getDefaultGradeDistribution(): GradeDistribution {
+  return {
+    A: '0',
+    AB: '0',
+    B: '0',
+    BC: '0',
+    C: '0',
+    D: '0',
+    F: '0'
+  };
+}
+
+// 선수과목 생성 함수
+async function createMissingPrerequisite(courseId: string): Promise<void> {
+  const existingPrereq = await prisma.course.findFirst({ where: { code: courseId } });
+
+  if (!existingPrereq) {
+    const createData: Prisma.CourseCreateInput = {
+      id: `temp-${courseId.replace(/\s+/g, '-')}`,
+      code: courseId,
+      name: `Temporary ${courseId}`,
+      description: 'No description available',
+      credits: 3,
+      department: courseId.split(' ')[0],
+      level: courseId.split(' ')[1].substring(0, 1) + '00',
+      prerequisites: [],
+      term: ['Fall', 'Spring'],
+      gradeDistribution: JSON.stringify(getDefaultGradeDistribution())
+    };
+
+    await prisma.course.create({ data: createData });
+  }
+}
+
+// 마이그레이션 함수
 async function migratePrerequisites() {
   console.log('Starting prerequisites migration...');
   const batchSize = 50;
@@ -65,91 +90,52 @@ async function migratePrerequisites() {
   let errorCount = 0;
 
   try {
-    // 1. 모든 과목 가져오기
     const courses = await prisma.course.findMany();
     console.log(`Found ${courses.length} courses to process`);
 
-    // 2. 각 과목의 선수과목 처리
     for (let i = 0; i < courses.length; i += batchSize) {
       const batch = courses.slice(i, i + batchSize);
-      
-      await Promise.all(batch.map(async (course: Course) => {
-        try {
-          // 선수과목 추출
-          const prerequisites = await extractPrerequisites(course.description);
-          
-          // 성적 분포 데이터 업데이트 (없는 경우)
-          let gradeDistributionJson = '{}';
-          if (!course.gradeDistribution || course.gradeDistribution === '{}') {
-            const defaultGrades: GradeDistribution = {
-              A: '0',
-              AB: '0',
-              B: '0',
-              BC: '0',
-              C: '0',
-              D: '0',
-              F: '0'
-            };
-            gradeDistributionJson = JSON.stringify(defaultGrades);
-          } else {
-            gradeDistributionJson = typeof course.gradeDistribution === 'string' 
-              ? course.gradeDistribution 
-              : JSON.stringify(course.gradeDistribution);
-          }
 
-          // 과목 정보 업데이트
-          const updateData: Prisma.CourseUpdateInput = {
-            prerequisites: prerequisites.map(p => p.courseId),
-            gradeDistribution: gradeDistributionJson
-          };
+      await Promise.all(
+        batch.map(async (course) => {
+          try {
+            const prerequisites = await extractPrerequisites(course.description || '');
+            const gradeDistributionJson =
+              course.gradeDistribution && course.gradeDistribution !== '{}'
+                ? JSON.stringify(course.gradeDistribution)
+                : JSON.stringify(getDefaultGradeDistribution());
 
-          await prisma.course.update({
-            where: { id: course.id },
-            data: updateData
-          });
-
-          // 누락된 선수과목 생성
-          for (const prereq of prerequisites) {
-            const existingPrereq = await prisma.course.findFirst({
-              where: { code: prereq.courseId }
+            await prisma.course.update({
+              where: { id: course.id },
+              data: {
+                prerequisites: prerequisites.map((p) => p.courseId),
+                gradeDistribution: gradeDistributionJson
+              }
             });
 
-            if (!existingPrereq) {
-              const createData: Prisma.CourseCreateInput = {
-                id: `temp-${prereq.courseId.replace(/\s+/g, '-')}`,
-                code: prereq.courseId,
-                name: `Temporary ${prereq.courseId}`,
-                description: 'No description available',
-                credits: 3,
-                department: prereq.courseId.split(' ')[0],
-                level: prereq.courseId.split(' ')[1].substring(0, 1) + '00',
-                prerequisites: [],
-                term: ['Fall', 'Spring'],
-                gradeDistribution: '{}'
-              };
+            // 누락된 선수과목 생성
+            await Promise.all(
+              prerequisites.map((prereq) => createMissingPrerequisite(prereq.courseId))
+            );
 
-              await prisma.course.create({ data: createData });
+            processedCount++;
+            if (processedCount % 10 === 0) {
+              console.log(`Processed ${processedCount}/${courses.length} courses`);
             }
+          } catch (error) {
+            errorCount++;
+            console.error(`Error processing course ${course.code}:`, error);
           }
+        })
+      );
 
-          processedCount++;
-          if (processedCount % 10 === 0) {
-            console.log(`Processed ${processedCount}/${courses.length} courses`);
-          }
-        } catch (error) {
-          errorCount++;
-          console.error(`Error processing course ${course.code}:`, error);
-        }
-      }));
-
-      // API 속도 제한 준수
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 속도 제한 준수
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     console.log('\nMigration completed:');
     console.log(`- Total courses processed: ${processedCount}`);
     console.log(`- Errors encountered: ${errorCount}`);
-
   } catch (error) {
     console.error('Migration failed:', error);
     process.exit(1);
