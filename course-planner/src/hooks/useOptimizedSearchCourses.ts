@@ -1,45 +1,35 @@
 // src/hooks/useOptimizedSearchCourses.ts
-
-import { useState, useCallback, useEffect } from 'react';
-import { useDebounce } from './useDebounce';
-import { CacheService } from '@/lib/cache/CacheService';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Course } from '@/types/course';
-import type { SortOption } from '@/utils/sortUtils';
+import { CacheService } from '@/lib/cache/CacheService';
 
-export interface SearchOptions {
-  initialQuery?: string;
-  debounceTime?: number;
+interface SearchOptions {
   autoSearch?: boolean;
-  cacheResults?: boolean;
+  debounceTime?: number;
+  itemsPerPage?: number;
 }
-
 
 export function useOptimizedSearchCourses(options: SearchOptions = {}) {
   const {
-    initialQuery = '',
-    debounceTime = 300,
     autoSearch = true,
-    cacheResults = true
+    debounceTime = 300,
+    itemsPerPage = 10
   } = options;
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState(initialQuery);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [sortBy, setSortBy] = useState<SortOption>('grade');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const debouncedSearchTerm = useDebounce(searchTerm, debounceTime);
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const cacheService = CacheService.getInstance();
 
-  const searchCourses = useCallback(async (
-    query: string,
-    page: number = 1
-  ) => {
+  const searchCourses = useCallback(async (query: string, page: number = 1) => {
     if (!query.trim()) {
       setCourses([]);
+      setTotalPages(1);
       return;
     }
 
@@ -47,40 +37,34 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     setError(null);
 
     try {
-      // 캐시된 결과 확인
-      if (cacheResults) {
-        const cachedResults = await cacheService.getCachedSearchResults(
-          `${query}:${page}:${sortBy}:${sortOrder}`
-        );
-        if (cachedResults) {
-          setCourses(cachedResults.courses);
-          setTotalPages(cachedResults.totalPages);
-          setIsLoading(false);
-          return;
-        }
+      // Check cache first
+      const cacheKey = `search:${query}:${page}`;
+      const cachedResults = await cacheService.getCachedSearchResults(cacheKey);
+
+      if (cachedResults) {
+        setCourses(cachedResults.courses);
+        setTotalPages(cachedResults.totalPages);
+        setCurrentPage(page);
+        setIsLoading(false);
+        return;
       }
 
-      // API 호출
+      // Fetch from API
       const response = await fetch(
-        `/api/courses/search?query=${encodeURIComponent(query)}&page=${page}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+        `/api/courses/search?query=${encodeURIComponent(query)}&page=${page}&limit=${itemsPerPage}`
       );
-      
+
       if (!response.ok) {
-        throw new Error('Failed to search courses');
+        throw new Error('Search failed');
       }
 
       const data = await response.json();
       
-      // 결과 캐싱
-      if (cacheResults) {
-        await cacheService.setCachedSearchResults(
-          `${query}:${page}:${sortBy}:${sortOrder}`,
-          data
-        );
-      }
+      // Cache the results
+      await cacheService.setCachedSearchResults(cacheKey, data);
 
       setCourses(data.courses);
-      setTotalPages(data.totalPages || 1);
+      setTotalPages(data.totalPages);
       setCurrentPage(page);
 
     } catch (err) {
@@ -89,58 +73,34 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [sortBy, sortOrder, cacheResults]);
+  }, [itemsPerPage]);
 
-  // 자동 검색 처리
+  const clearSearch = useCallback(() => {
+    setCourses([]);
+    setCurrentPage(1);
+    setTotalPages(1);
+    setSearchTerm('');
+    setError(null);
+  }, []);
+
+  // Clean up on unmount
   useEffect(() => {
-    if (autoSearch && debouncedSearchTerm) {
-      searchCourses(debouncedSearchTerm, 1);
-    }
-  }, [debouncedSearchTerm, searchCourses, autoSearch]);
-
-  // 정렬 처리
-  const handleSort = useCallback((newSortBy: SortOption) => {
-    setSortBy(newSortBy);
-    if (searchTerm) {
-      // 정렬 변경 시 캐시 무효화
-      if (cacheResults) {
-        cacheService.invalidateSearchCache(searchTerm);
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
       }
-      searchCourses(searchTerm, currentPage);
-    }
-  }, [searchTerm, currentPage, cacheResults]);
-
-  const handleOrderChange = useCallback(() => {
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    if (searchTerm) {
-      // 정렬 순서 변경 시 캐시 무효화
-      if (cacheResults) {
-        cacheService.invalidateSearchCache(searchTerm);
-      }
-      searchCourses(searchTerm, currentPage);
-    }
-  }, [searchTerm, currentPage, cacheResults]);
-
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-    if (searchTerm) {
-      searchCourses(searchTerm, page);
-    }
-  }, [searchTerm, searchCourses]);
+    };
+  }, []);
 
   return {
     courses,
     isLoading,
     error,
-    searchTerm,
-    setSearchTerm,
     currentPage,
     totalPages,
-    sortBy,
-    sortOrder,
-    handleSort,
-    handleOrderChange,
-    handlePageChange,
-    searchCourses
+    searchTerm,
+    setSearchTerm,
+    searchCourses,
+    clearSearch
   };
 }
