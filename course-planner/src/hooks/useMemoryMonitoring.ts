@@ -1,17 +1,18 @@
-// src/hooks/useMemoryMonitoring.ts
-import { useState, useEffect, useCallback } from 'react';
-import { MemoryMonitor, MemoryStats } from '@/lib/performance/memoryMonitor';
+import { useState, useCallback, useEffect } from 'react';
+import { MemoryMonitor, type MemoryStats, type MemoryLeak } from '@/lib/performance/memoryMonitor';
 
 interface UseMemoryMonitoringOptions {
-  onLeak?: (leak: any) => void;
-  warningThreshold?: number;  // percentage of heap size (0-100)
-  monitoringInterval?: number;  // milliseconds
+  onLeak?: (leak: MemoryLeak) => void;
+  warningThreshold?: number;
+  monitoringInterval?: number;
   componentName?: string;
 }
 
 export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
-  const [memoryStats, setMemoryStats] = useState<MemoryStats[]>([]);
-  const [detectedLeaks, setDetectedLeaks] = useState<any[]>([]);
+  const [memoryData, setMemoryData] = useState<{
+    stats: MemoryStats[];
+    leaks: MemoryLeak[];
+  }>({ stats: [], leaks: [] });
   const [isMonitoring, setIsMonitoring] = useState(false);
 
   const monitor = MemoryMonitor.getInstance();
@@ -26,60 +27,43 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
       return await operation();
     } finally {
       const duration = performance.now() - startTime;
-      monitor.collectStats({
-        name: options.componentName ? `${options.componentName}.${name}` : name,
-        duration,
-        category,
-        timestamp: Date.now()
-      });
+      const currentData = monitor.getCurrentData();
+      const usageRatio = currentData.stats.usedJSHeapSize / currentData.stats.jsHeapSize;
+      
+      if (usageRatio > (options.warningThreshold || 0.8)) {
+        console.warn(`High memory usage detected during ${name}: ${(usageRatio * 100).toFixed(1)}%`);
+      }
     }
-  }, [options.componentName]);
+  }, [options.warningThreshold]);
 
   useEffect(() => {
-    const handleMemoryLeak = (event: CustomEvent) => {
-      const leak = event.detail;
-      setDetectedLeaks(prev => [...prev, leak]);
-      options.onLeak?.(leak);
-    };
+    const unsubscribe = monitor.subscribe(
+      options.componentName || 'default',
+      (data) => {
+        setMemoryData(prev => ({
+          stats: [...prev.stats, data.stats],
+          leaks: data.leaks
+        }));
 
-    window.addEventListener('memory-leak', handleMemoryLeak as EventListener);
+        if (data.leaks.length > 0 && options.onLeak) {
+          data.leaks.forEach(options.onLeak);
+        }
+      }
+    );
+
+    monitor.startMonitoring();
+    setIsMonitoring(true);
 
     return () => {
-      window.removeEventListener('memory-leak', handleMemoryLeak as EventListener);
+      unsubscribe();
+      monitor.stopMonitoring();
+      setIsMonitoring(false);
     };
-  }, [options.onLeak]);
-
-  const startMonitoring = useCallback(() => {
-    setIsMonitoring(true);
-    setMemoryStats(monitor.getMemoryStats());
-  }, []);
-
-  const stopMonitoring = useCallback(() => {
-    setIsMonitoring(false);
-    monitor.stopMonitoring();
-  }, []);
-
-  const clearLeaks = useCallback(() => {
-    setDetectedLeaks([]);
-  }, []);
-
-  useEffect(() => {
-    if (isMonitoring) {
-      const intervalId = setInterval(() => {
-        setMemoryStats(monitor.getMemoryStats());
-      }, options.monitoringInterval || 5000);
-
-      return () => clearInterval(intervalId);
-    }
-  }, [isMonitoring, options.monitoringInterval]);
+  }, [options.componentName, options.onLeak]);
 
   return {
-    memoryStats,
-    detectedLeaks,
+    memoryData,
     isMonitoring,
-    startMonitoring,
-    stopMonitoring,
-    clearLeaks,
     trackOperation
   };
 }

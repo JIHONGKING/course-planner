@@ -2,90 +2,134 @@
 
 import type { Course } from '@/types/course';
 
-interface CacheOptions {
-  maxSize?: number;       // 최대 캐시 크기 (bytes)
-  ttl?: number;          // Time To Live (milliseconds)
-  updateAgeOnGet?: boolean;  // 조회 시 age 업데이트 여부
+interface CacheConfig {
+  maxSize: number;       // Maximum size in bytes
+  ttl: number;          // Time To Live in milliseconds
+  invalidationInterval?: number; // Cache cleanup interval
 }
 
-interface CacheItem<T> {
-  data: T;
+interface CacheMetrics {
+  hitCount: number;
+  missCount: number;
+  evictionCount: number;
+  totalSize: number;
+}
+
+interface CacheStats {
+  hitRate: number;
+  size: number;          // totalSize를 size로 변경
+  itemCount: number;     // totalItems를 itemCount로 변경
+  evictionCount: number;
+  utilizationRate: number;
+}
+
+interface CacheEntry<T> {
+  value: T;
   size: number;
-  hits: number;
   lastAccessed: number;
   expiresAt: number;
+  hits: number;
 }
 
 export class OptimizedCacheManager<T> {
-  private cache: Map<string, CacheItem<T>>;
-  private currentSize: number;
-  private readonly maxSize: number;
-  private readonly ttl: number;
-  private readonly updateAgeOnGet: boolean;
+  private cache: Map<string, CacheEntry<T>>;
+  private metrics: CacheMetrics;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(options: CacheOptions = {}) {
+  constructor(private config: CacheConfig) {
     this.cache = new Map();
-    this.currentSize = 0;
-    this.maxSize = options.maxSize || 50 * 1024 * 1024; // 기본 50MB
-    this.ttl = options.ttl || 5 * 60 * 1000; // 기본 5분
-    this.updateAgeOnGet = options.updateAgeOnGet ?? true;
-  }
-
-  async set(key: string, value: T, options?: { ttl?: number }): Promise<void> {
-    const size = this.calculateSize(value);
-    const ttl = options?.ttl ?? this.ttl;
-
-    // 공간 확보가 필요한 경우
-    if (this.currentSize + size > this.maxSize) {
-      await this.evict(size);
-    }
-
-    const item: CacheItem<T> = {
-      data: value,
-      size,
-      hits: 0,
-      lastAccessed: Date.now(),
-      expiresAt: Date.now() + ttl
+    this.metrics = {
+      hitCount: 0,
+      missCount: 0,
+      evictionCount: 0,
+      totalSize: 0,
     };
 
-    const existingItem = this.cache.get(key);
-    if (existingItem) {
-      this.currentSize -= existingItem.size;
+    if (config.invalidationInterval) {
+      this.startCleanup();
     }
-
-    this.cache.set(key, item);
-    this.currentSize += size;
   }
 
   async get(key: string): Promise<T | null> {
-    const item = this.cache.get(key);
-    if (!item) return null;
+    const entry = this.cache.get(key);
 
-    const now = Date.now();
-    if (now > item.expiresAt) {
-      this.delete(key);
+    if (!entry) {
+      this.metrics.missCount++;
       return null;
     }
 
-    item.hits++;
-    if (this.updateAgeOnGet) {
-      item.lastAccessed = now;
+    if (Date.now() > entry.expiresAt) {
+      this.delete(key);
+      this.metrics.missCount++;
+      return null;
     }
 
-    return item.data;
+    entry.hits++;
+    entry.lastAccessed = Date.now();
+    this.metrics.hitCount++;
+    return entry.value;
+  }
+
+  async set(key: string, value: T, ttl?: number): Promise<void> {
+    const size = this.calculateSize(value);
+
+    // Ensure there's enough space for the new entry
+    while (this.metrics.totalSize + size > this.config.maxSize) {
+      const evicted = this.evictLRU();
+      if (!evicted) break;
+    }
+
+    const entry: CacheEntry<T> = {
+      value,
+      size,
+      lastAccessed: Date.now(),
+      expiresAt: Date.now() + (ttl || this.config.ttl),
+      hits: 0,
+    };
+
+    const existingEntry = this.cache.get(key);
+    if (existingEntry) {
+      this.metrics.totalSize -= existingEntry.size;
+    }
+
+    this.cache.set(key, entry);
+    this.metrics.totalSize += size;
   }
 
   delete(key: string): void {
-    const item = this.cache.get(key);
-    if (item) {
-      this.currentSize -= item.size;
+    const entry = this.cache.get(key);
+    if (entry) {
+      this.metrics.totalSize -= entry.size;
       this.cache.delete(key);
     }
   }
 
   clear(): void {
     this.cache.clear();
-    this.currentSize = 0;
+    this.metrics.totalSize = 0;
+  }
+
+  getStats() {
+    const hitRate =
+      this.metrics.hitCount /
+        (this.metrics.hitCount + this.metrics.missCount) ||
+      0;
+
+    return {
+      size: this.metrics.totalSize,
+      itemCount: this.cache.size,
+      hitRate,
+      evictionCount: this.metrics.evictionCount,
+      utilizationRate: this.metrics.totalSize / this.config.maxSize,
+    };
+  }
+
+  invalidatePattern(pattern: RegExp): void {
+    for (const key of this.cache.keys()) {
+      if (pattern.test(key)) {
+        this.delete(key);
+      }
+    }
   }
 
   private calculateSize(value: T): number {
@@ -97,73 +141,63 @@ export class OptimizedCacheManager<T> {
     }
   }
 
-  private async evict(requiredSize: number): Promise<void> {
-    if (requiredSize > this.maxSize) {
-      throw new Error('Item size exceeds cache maximum size');
-    }
+  private evictLRU(): boolean {
+    let oldestKey: string | null = null;
+    let oldestAccess = Infinity;
 
-    const items = Array.from(this.cache.entries())
-      .map(([key, item]) => ({
-        key,
-        score: this.calculateEvictionScore(item)
-      }))
-      .sort((a, b) => a.score - b.score);
-
-    let freedSpace = 0;
-    for (const { key } of items) {
-      const item = this.cache.get(key);
-      if (!item) continue;
-
-      this.delete(key);
-      freedSpace += item.size;
-
-      if (freedSpace >= requiredSize) break;
-    }
-  }
-
-  private calculateEvictionScore(item: CacheItem<T>): number {
-    const age = Date.now() - item.lastAccessed;
-    const hitRate = item.hits / Math.max(age / 1000, 1); // hits per second
-    return hitRate / item.size; // 높은 점수 = 보존 가치 높음
-  }
-
-  async evictIfNeeded(requiredSize: number): Promise<void> {
-    let currentSize = Array.from(this.cache.values())
-      .reduce((sum, item) => sum + item.size, 0);
-
-    while (currentSize + requiredSize > this.maxSize && this.cache.size > 0) {
-      const oldestKey = Array.from(this.cache.entries())
-        .sort(([, a], [, b]) => a.lastAccessed - b.lastAccessed)[0][0];
-
-      const evictedItem = this.cache.get(oldestKey);
-      if (evictedItem) {
-        currentSize -= evictedItem.size;
-        this.cache.delete(oldestKey);
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.lastAccessed < oldestAccess) {
+        oldestAccess = entry.lastAccessed;
+        oldestKey = key;
       }
     }
-  }
 
-  public clearPattern(pattern: RegExp): void {
-    for (const key of this.cache.keys()) {
-      if (pattern.test(key)) {
-        this.cache.delete(key);
+    if (oldestKey) {
+      const entry = this.cache.get(oldestKey);
+      this.delete(oldestKey);
+      if (entry) {
+        this.metrics.evictionCount++;
+        return true;
       }
     }
+
+    return false;
   }
 
-  getStats() {
-    return {
-      itemCount: this.cache.size,
-      currentSize: this.currentSize,
-      maxSize: this.maxSize,
-      utilizationPercent: (this.currentSize / this.maxSize) * 100
-    };
+  private startCleanup(): void {
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.cache.entries()) {
+        if (now > entry.expiresAt) {
+          this.delete(key);
+        }
+      }
+    }, this.config.invalidationInterval || 60000);
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
   }
 }
 
-export const courseCache = new OptimizedCacheManager<Course>();
-export const performanceCache = new OptimizedCacheManager<any>();
-export const apiCache = new OptimizedCacheManager<any>({
+export function createCache<T>(config: Partial<CacheConfig> = {}): OptimizedCacheManager<T> {
+  const defaultConfig: CacheConfig = {
+    maxSize: 100 * 1024 * 1024, // 100MB
+    ttl: 5 * 60 * 1000, // 5 minutes
+    invalidationInterval: 60000, // 1 minute
+  };
+
+  return new OptimizedCacheManager<T>({
+    ...defaultConfig,
+    ...config,
+  });
+}
+
+export const courseCache = createCache<Course>();
+export const performanceCache = createCache<any>();
+export const apiCache = createCache<any>({
   maxSize: 50 * 1024 * 1024, // 50MB
-  ttl: 5 * 60 * 1000 // 5 minutes
+  ttl: 5 * 60 * 1000, // 5 minutes
 });

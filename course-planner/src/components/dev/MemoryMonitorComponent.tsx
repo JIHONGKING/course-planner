@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { MemoryMonitor } from '@/lib/performance/memoryMonitor';
+import { MemoryMonitor, type MemoryStats, type MemoryLeak } from '@/lib/performance/memoryMonitor';
 
 const MemoryMonitorComponent: React.FC = () => {
-  const [memoryStats, setMemoryStats] = useState(MemoryMonitor.getInstance().getMemoryStats());
+  const [memoryStats, setMemoryStats] = useState<{ 
+    stats: MemoryStats[]; 
+    leaks: MemoryLeak[] 
+  }>({ stats: [], leaks: [] });
 
   useEffect(() => {
     const monitor = MemoryMonitor.getInstance();
     monitor.startMonitoring();
 
     const unsubscribe = monitor.subscribe('memory-monitor', (data) => {
-      setMemoryStats(data.stats);
+      setMemoryStats(prev => ({
+        ...prev,
+        stats: [...prev.stats, data.stats],
+        leaks: data.leaks
+      }));
     });
 
     return () => {
@@ -22,9 +29,10 @@ const MemoryMonitorComponent: React.FC = () => {
     <div>
       <h1>Memory Usage</h1>
       <ul>
-        {memoryStats.map((stat, index) => (
+        {memoryStats.stats.map((stat, index) => (
           <li key={index}>
-            <strong>Used:</strong> {stat.usedJSHeapSize} bytes, <strong>Total:</strong> {stat.totalJSHeapSize} bytes
+            <strong>Used:</strong> {stat.usedJSHeapSize} bytes, 
+            <strong>Total:</strong> {stat.totalJSHeapSize} bytes
           </li>
         ))}
       </ul>

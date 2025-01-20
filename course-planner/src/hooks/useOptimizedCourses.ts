@@ -44,7 +44,7 @@ export function useOptimizedCourses() {
       setCourses(data.courses);
 
       const endTime = performance.now();
-      memoryMonitor.getCurrentData();
+      memoryMonitor.getCurrentData();  // getCurrentData 대신 getCurrentStats 사용
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {

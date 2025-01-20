@@ -37,7 +37,7 @@ export async function cachedFetch<T>(
 
   // 캐시 저장 (skipCache가 false일 때)
   if (!skipCache) {
-    await apiCache.set(cacheKey, data, { ttl });
+    await apiCache.set(cacheKey, data, config?.ttl || undefined);
   }
 
   return data as T;

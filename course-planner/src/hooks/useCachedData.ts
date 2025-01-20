@@ -31,9 +31,9 @@ export function useCachedCourses(options: UseCachedDataOptions = {}) {
     }
 }, []);
 
-  const invalidateCache = useCallback(() => {
-    courseCache.clearPattern(/^search:/);
-  }, []);
+const invalidateCache = useCallback(() => {
+  courseCache.invalidatePattern(/^search:/); // clearPattern을 invalidatePattern으로 수정
+}, []);
 
   return {
     courses,

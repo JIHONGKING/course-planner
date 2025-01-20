@@ -11,6 +11,8 @@ import { useMemoryMonitoring } from '@/hooks/useMemoryMonitoring';
 import DraggableCourseCard from '@/components/common/OptimizedDraggable';
 import CourseSearchResults from '@/components/course/CourseSearchResults';
 import YearPlanner from '../course-planner/YearPlanner';  // 경로 수정
+import { type MemoryStats } from '@/lib/performance/memoryMonitor';
+
 
 
 export default function CoursePlanner() {
@@ -28,7 +30,6 @@ export default function CoursePlanner() {
       console.warn('Memory leak detected:', leak);
     }
   });
-
 
   // 향상된 드래그 앤 드롭 핸들러
   const handleDragStart = useCallback((course: Course) => {
