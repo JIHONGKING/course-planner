@@ -169,6 +169,7 @@ export function usePlanner() {
       return [...prev, course];
     });
   }, []);
+  
 
   // 저장된 코스 제거
   const removeSavedCourse = useCallback((courseId: string) => {

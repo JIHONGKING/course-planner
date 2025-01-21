@@ -1,6 +1,8 @@
 // src/hooks/useOptimizedSearchCourses.ts
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Course } from '@/types/course';
+import type { SortOption, SortOrder } from '@/utils/sortUtils';
+import { sortCourses } from '@/utils/sortUtils';
 import { CacheService } from '@/lib/cache/CacheService';
 
 interface SearchOptions {
@@ -22,6 +24,8 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('grade');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const cacheService = CacheService.getInstance();
@@ -37,7 +41,6 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     setError(null);
 
     try {
-      // Check cache first
       const cacheKey = `search:${query}:${page}`;
       const cachedResults = await cacheService.getCachedSearchResults(cacheKey);
 
@@ -49,7 +52,6 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
         return;
       }
 
-      // Fetch from API
       const response = await fetch(
         `/api/courses/search?query=${encodeURIComponent(query)}&page=${page}&limit=${itemsPerPage}`
       );
@@ -60,10 +62,10 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
 
       const data = await response.json();
       
-      // Cache the results
       await cacheService.setCachedSearchResults(cacheKey, data);
 
-      setCourses(data.courses);
+      const sortedData = sortCourses(data.courses, sortBy, sortOrder);
+      setCourses(sortedData);
       setTotalPages(data.totalPages);
       setCurrentPage(page);
 
@@ -73,7 +75,7 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [itemsPerPage]);
+  }, [itemsPerPage, sortBy, sortOrder]);
 
   const clearSearch = useCallback(() => {
     setCourses([]);
@@ -83,7 +85,32 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     setError(null);
   }, []);
 
-  // Clean up on unmount
+  const handleSort = useCallback((newSortBy: SortOption) => {
+    if (newSortBy === sortBy) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(newSortBy);
+      setSortOrder('desc');
+    }
+    
+    const sortedData = sortCourses(courses, newSortBy, sortOrder);
+    setCourses(sortedData);
+  }, [courses, sortBy, sortOrder]);
+
+  const handleOrderChange = useCallback(() => {
+    const newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    setSortOrder(newOrder);
+    const sortedData = sortCourses(courses, sortBy, newOrder);
+    setCourses(sortedData);
+  }, [courses, sortBy, sortOrder]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    if (searchTerm) {
+      searchCourses(searchTerm, page);
+    }
+  }, [searchTerm, searchCourses]);
+
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {
@@ -100,7 +127,12 @@ export function useOptimizedSearchCourses(options: SearchOptions = {}) {
     totalPages,
     searchTerm,
     setSearchTerm,
+    sortBy,
+    sortOrder,
     searchCourses,
-    clearSearch
+    clearSearch,
+    handleSort: handleSort,
+    handleOrderChange: handleOrderChange,
+    handlePageChange: handlePageChange
   };
 }

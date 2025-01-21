@@ -1,5 +1,5 @@
 // src/components/course-planner/SavedCourses.tsx
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Trash2, ArrowDownWideNarrow, Info } from 'lucide-react';
 import CourseCard from '@/components/common/CourseCard';
 import type { Course } from '@/types/course';
@@ -24,10 +24,18 @@ export default function SavedCourses({
   sortBy = 'grade',
   sortOrder = 'desc'
 }: SavedCoursesProps) {
-
-  const sortedCourses = React.useMemo(() => {
+  const sortedCourses = useMemo(() => {
     return sortCourses(courses, sortBy, sortOrder);
   }, [courses, sortBy, sortOrder]);
+
+  const handleRemove = useCallback((courseId: string) => {
+    console.log('Removing course:', courseId);
+    onRemove(courseId);
+  }, [onRemove]);
+
+  const handleAddToPlan = useCallback((course: Course) => {
+    onAddToPlan(course);
+  }, [onAddToPlan]);
 
   return (
     <div className="mt-8 border-t border-gray-200 pt-8">
@@ -66,15 +74,14 @@ export default function SavedCourses({
         </div>
       </div>
 
-      {/* 과목 목록 */}
       <div className="border border-gray-200 rounded-lg p-4 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {sortedCourses.map(course => (
             <CourseCard
               key={course.id}
               course={course}
-              onRemove={() => onRemove(course.id)}
-              onAdd={() => onAddToPlan(course)}
+              onRemove={() => handleRemove(course.id)}
+              onAdd={() => handleAddToPlan(course)}
               showPrerequisites={true}
             />
           ))}

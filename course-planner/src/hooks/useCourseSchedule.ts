@@ -1,110 +1,62 @@
 // src/hooks/useCourseSchedule.ts
 
-import { useState, useCallback, useEffect } from 'react';
-import type { Schedule } from '@/types/course';
+import { useState, useCallback } from 'react';
+import type { Schedule } from '@/types/schedule';
 
-interface UseCourseScheduleProps {
+export function useCourseSchedule({ courseId, initialSchedule = [] }: {
   courseId: string;
   initialSchedule?: Schedule[];
-}
-
-export function useCourseSchedule({ courseId, initialSchedule = [] }: UseCourseScheduleProps) {
+}) {
   const [schedule, setSchedule] = useState<Schedule[]>(initialSchedule);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch schedule
-  const fetchSchedule = useCallback(async () => {
-    if (!courseId) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/courses/${courseId}/schedule`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch schedule');
-      }
-
-      setSchedule(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch schedule');
-    } finally {
-      setIsLoading(false);
+  const updateSchedule = async (newSchedule: Schedule[]) => {
+    if (!courseId) {
+      throw new Error('Course ID is required');
     }
-  }, [courseId]);
-
-  // Update schedule
-  const updateSchedule = useCallback(async (newSchedule: Schedule[]) => {
-    if (!courseId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
+      console.log('Updating schedule:', {
+        courseId,
+        newSchedule
+      });
+
       const response = await fetch(`/api/courses/${courseId}/schedule`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(newSchedule),
+        body: JSON.stringify(newSchedule)
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update schedule');
+        throw new Error(data.error || data.details || 'Failed to update schedule');
       }
 
-      setSchedule(newSchedule);
+      setSchedule(data);
+      return data;
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update schedule');
-      throw err; // Re-throw to handle in the component
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update schedule';
+      console.error('Error in PUT request:', err);
+      setError(errorMessage);
+      throw err;
+
     } finally {
       setIsLoading(false);
     }
-  }, [courseId]);
-
-  // Clear schedule
-  const clearSchedule = useCallback(async () => {
-    if (!courseId) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/courses/${courseId}/schedule`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to clear schedule');
-      }
-
-      setSchedule([]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to clear schedule');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [courseId]);
-
-  // Load initial schedule
-  useEffect(() => {
-    if (courseId && initialSchedule.length === 0) {
-      fetchSchedule();
-    }
-  }, [courseId, initialSchedule.length, fetchSchedule]);
+  };
 
   return {
     schedule,
     isLoading,
     error,
-    updateSchedule,
-    clearSchedule,
-    refreshSchedule: fetchSchedule,
+    updateSchedule
   };
 }

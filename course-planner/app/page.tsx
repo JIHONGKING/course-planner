@@ -16,6 +16,8 @@ import GraduationRequirements from '@/components/course-planner/GraduationRequir
 import CourseRecommendations from '@/components/course-planner/CourseRecommendations';
 import SearchCourses from '@/components/course/SearchCourses';
 import CourseRecommender from '@/components/course-planner/CourseRecommendations';  // 추가
+import { useCallback } from 'react';
+
 
 
 function isGradeDistribution(value: any): value is GradeDistribution {
@@ -105,7 +107,7 @@ export default function Home() {
     await searchCourses(query);
   };
 
-  const handleCourseClick = (course: Course) => {
+  const handleCourseClick = useCallback((course: Course) => {
     try {
       const isValid = validateCourseSelection(
         course,
@@ -113,7 +115,7 @@ export default function Home() {
         currentTermCourses,
         'Fall'
       );
-
+  
       if (isValid) {
         saveCourse(course);
         clearValidationError();
@@ -121,25 +123,14 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to save course:', error);
     }
-  };
+  }, [validateCourseSelection, completedCourses, currentTermCourses, saveCourse, clearValidationError]);
 
   const handleCourseSelect = handleCourseClick;  
 
   const handleCourseAdd = (course: Course, semesterId: string) => {
     try {
-      const [year, term] = semesterId.split('-');
-      const isValid = validateCourseSelection(
-        course,
-        completedCourses,
-        currentTermCourses,
-        term
-      );
-
-      if (isValid) {
-        addCourse(course, semesterId);
-        removeSavedCourse(course.id);
-        clearValidationError();
-      }
+      addCourse(course, semesterId);
+      removeSavedCourse(course.id);
     } catch (error) {
       console.error('Failed to add course:', error);
     }

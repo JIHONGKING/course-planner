@@ -1,13 +1,15 @@
-// src/components/course/SearchCourses.tsx
+// /Users/jihong/Desktop/AutoClassfinder/course-planner/src/components/course/SearchCourses.tsx
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Search } from 'lucide-react';
 import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';
 import CourseSearchResults from './CourseSearchResults';
 import CourseFilters from './CourseFilters';
+import CourseCard from '@/components/common/CourseCard';
 import type { Course } from '@/types/course';
 import type { SortOption } from '@/utils/sortUtils';
 import type { FilterOptions } from '@/components/ui/FilterSection';
+import debounce from 'lodash/debounce';
 
 export default function SearchCourses() {
   const {
@@ -26,28 +28,33 @@ export default function SearchCourses() {
     searchCourses
   } = useOptimizedSearchCourses({ autoSearch: true });
 
-  const isValidSearch = (query: string): boolean => {
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+
+  const isValidSearch = useCallback((query: string): boolean => {
     if (query.length < 2) return false;
     const incompleteHangul = /[ㄱ-ㅎㅏ-ㅣ]/;
     if (incompleteHangul.test(query)) return false;
     return true;
-  };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  }, []);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
 
     if (isValidSearch(value)) {
       searchCourses(value);
     }
-  };
+  }, [searchCourses, setSearchTerm, isValidSearch]);
 
-  // Filter Change Handler
-  const onFilterChange = (filters: FilterOptions): void => {
+  const onFilterChange = useCallback((filters: FilterOptions): void => {
     if (searchTerm) {
       searchCourses(searchTerm, currentPage);
     }
-  };
+  }, [searchTerm, currentPage, searchCourses]);
+
+  const handleCourseClick = useCallback((course: Course) => {
+    setSelectedCourse(course);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -70,43 +77,30 @@ export default function SearchCourses() {
       </div>
 
       {/* Course Results */}
-      <div className="space-y-4">
-        {courses.length > 0 ? (
-          courses.map((course: Course) => (
-            <div key={course.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-              <div className="flex justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">{course.code}</h3>
-                  <p className="text-gray-600">{course.name}</p>
-                  <p className="text-sm text-gray-500 mt-1">{course.credits} credits</p>
-                </div>
-                {course.courseSchedules && course.courseSchedules.length > 0 && (
-                  <div className="text-sm text-gray-600">
-                    {course.courseSchedules.map((schedule, index: number) => (
-                      <div key={index}>
-                        {schedule.dayOfWeek} {schedule.startTime}-{schedule.endTime}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {course.description && (
-                <p className="mt-2 text-sm text-gray-500">{course.description}</p>
-              )}
-            </div>
-          ))
-        ) : (
-          !isLoading && searchTerm && (
-            <div className="text-center py-8 text-gray-500">
-              검색 결과가 없습니다
-            </div>
-          )
+      <div className="space-y-2">
+        {courses.map((course) => (
+          <CourseCard
+            key={course.id}
+            course={course}
+            onClick={() => handleCourseClick(course)}
+            className="cursor-pointer"
+            showPrerequisites={true}
+          />
+        ))}
+
+        {courses.length === 0 && searchTerm && !isLoading && (
+          <div className="text-center py-8 text-gray-500">
+            검색 결과가 없습니다
+          </div>
         )}
       </div>
 
-      {/* Filters and Results Pagination */}
-      <CourseFilters onFilterChange={onFilterChange} />
+      {/* Filters */}
+      <CourseFilters 
+        onFilterChange={onFilterChange} 
+      />
 
+      {/* Search Results */}
       <CourseSearchResults
         courses={courses}
         loading={isLoading}

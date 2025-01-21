@@ -45,6 +45,8 @@ model CourseSchedule {
   startTime String
   endTime   String
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
 }
 
 model CourseMetadata {

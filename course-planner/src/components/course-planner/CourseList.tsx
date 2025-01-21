@@ -1,11 +1,11 @@
 // src/components/course-planner/CourseList.tsx
 import React, { useMemo, useCallback } from 'react';
-import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';  // 변경된 부분
+import { useOptimizedSearchCourses } from '@/hooks/useOptimizedSearchCourses';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { SortControls } from '@/components/ui/SortControls';
 import { Pagination } from '@/components/ui/Pagination';
-import type { Course, GradeDistribution } from '@/types/course';
+import type { Course, GradeDistribution, CourseSchedule } from '@/types/course';
 
 const CourseList = React.memo(() => {
   const {
@@ -36,9 +36,9 @@ const CourseList = React.memo(() => {
   // 과목 통계 메모이제이션
   const stats = useMemo(() => ({
     totalCourses: courses.length,
-    totalCredits: courses.reduce((sum, course) => sum + course.credits, 0),
+    totalCredits: courses.reduce((sum: number, course: Course) => sum + course.credits, 0),
     averageGrade: courses.length > 0 
-      ? courses.reduce((sum, course) => sum + getGradeA(course.gradeDistribution), 0) / courses.length 
+      ? courses.reduce((sum: number, course: Course) => sum + getGradeA(course.gradeDistribution), 0) / courses.length 
       : 0
   }), [courses, getGradeA]);
 
@@ -68,8 +68,8 @@ const CourseList = React.memo(() => {
         </div>
       )}
 
-      <div className="space-y-4">
-        {courses.map((course) => (
+<div className="space-y-4">
+        {courses.map((course: Course) => (
           <div
             key={course.id}
             className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors duration-200"
@@ -87,16 +87,16 @@ const CourseList = React.memo(() => {
                   <p className="mt-1 text-sm text-gray-500">{course.description}</p>
                 )}
                 {course.courseSchedules && course.courseSchedules.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-600 font-medium">Schedule:</p>
-                    <div className="space-y-1">
-                      {course.courseSchedules.map((schedule, index) => (
-                        <p key={index} className="text-sm text-gray-500">
-                          {schedule.dayOfWeek} {schedule.startTime}-{schedule.endTime}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
+              <div className="mt-2">
+                <p className="text-sm text-gray-600 font-medium">Schedule:</p>
+                <div className="space-y-1">
+                  {course.courseSchedules.map((schedule: CourseSchedule, index: number) => (
+                    <p key={index} className="text-sm text-gray-500">
+                      {schedule.dayOfWeek} {schedule.startTime}-{schedule.endTime}
+                    </p>
+                  ))}
+                </div>
+              </div>
                 )}
               </div>
               <div className="ml-4 text-right">

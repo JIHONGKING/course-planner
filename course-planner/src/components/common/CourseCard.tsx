@@ -1,7 +1,8 @@
-// src/components/common/CourseCard.tsx
-import React, { useState } from 'react';
+///Users/jihong/Desktop/AutoClassfinder/course-planner/src/components/common/CourseCard.tsx
+import React, { useState, useCallback } from 'react';
 import { Info, Plus, X, Clock } from 'lucide-react';
 import type { Course } from '@/types/course';
+import type { Schedule } from '@/types/schedule';
 import { getGradeA } from '@/utils/gradeUtils';
 import { Dialog } from '@headlessui/react';
 import CourseScheduleEditor from '../course-planner/CourseScheduleEditor';
@@ -29,19 +30,55 @@ export default function CourseCard({
   className = ''
 }: CourseCardProps) {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { schedule, updateSchedule, isLoading, error } = useCourseSchedule({
     courseId: course.id,
     initialSchedule: course.courseSchedules
   });
 
-  // Schedule display helper
-  const formatScheduleDisplay = (schedules: Course['courseSchedules']) => {
+  const handleAdd = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onAdd) {
+      onAdd(course);
+    }
+  }, [course, onAdd]);
+
+  const handleRemove = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onRemove) {
+      onRemove();
+    }
+  }, [onRemove]);
+
+  const handleScheduleUpdate = async (newSchedule: Schedule[]) => {
+    try {
+      console.log('Submitting schedule update:', newSchedule);
+      await updateSchedule(newSchedule);
+      setIsScheduleModalOpen(false);
+      setErrorMessage(null);
+    } catch (err) {
+      console.error('Failed to update schedule:', err);
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : 'Failed to update schedule';
+      setErrorMessage(errorMessage);
+    }
+  };
+
+  const handleScheduleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsScheduleModalOpen(true);
+  }, []);
+
+  const formatScheduleDisplay = useCallback((schedules: Course['courseSchedules']) => {
     if (!schedules?.length) return null;
-    
     return schedules.map(slot => 
       `${slot.dayOfWeek} ${slot.startTime}-${slot.endTime}`
     ).join(', ');
-  };
+  }, []);
 
   return (
     <>
@@ -62,14 +99,10 @@ export default function CourseCard({
             </div>
           </div>
           
-          {/* Actions */}
           <div className="flex space-x-2">
             {onAdd && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAdd(course);
-                }}
+                onClick={handleAdd}
                 className="p-1 text-gray-400 hover:text-green-500"
               >
                 <Plus className="h-4 w-4" />
@@ -77,10 +110,7 @@ export default function CourseCard({
             )}
             {onRemove && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
+                onClick={handleRemove}
                 className="p-1 text-gray-400 hover:text-red-500"
               >
                 <X className="h-4 w-4" />
@@ -89,7 +119,6 @@ export default function CourseCard({
           </div>
         </div>
 
-        {/* Schedule Section */}
         {schedule && schedule.length > 0 && (
           <div className="mt-2 text-sm text-gray-600">
             <div className="flex items-center gap-1">
@@ -99,12 +128,8 @@ export default function CourseCard({
           </div>
         )}
 
-        {/* Schedule Edit Button */}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsScheduleModalOpen(true);
-          }}
+          onClick={handleScheduleClick}
           className="mt-2 text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
         >
           <Clock className="h-4 w-4" />
@@ -112,7 +137,6 @@ export default function CourseCard({
         </button>
       </div>
 
-      {/* Schedule Editor Modal */}
       <Dialog
         open={isScheduleModalOpen}
         onClose={() => setIsScheduleModalOpen(false)}
@@ -138,8 +162,8 @@ export default function CourseCard({
               }}
             />
 
-            {error && (
-              <p className="mt-2 text-sm text-red-600">{error}</p>
+            {errorMessage && (
+              <p className="mt-2 text-sm text-red-600">{errorMessage}</p>
             )}
 
             <div className="mt-4 flex justify-end">
