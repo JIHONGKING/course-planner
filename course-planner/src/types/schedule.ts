@@ -13,23 +13,20 @@ export interface TimeSlot {
 export interface Schedule {
   id?: string;
   dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
+  startTime: string; // HH:mm format
+  endTime: string;   // HH:mm format
   courseId?: string;
 }
+
 
 export interface ScheduleValidationResult {
   isValid: boolean;
   conflicts: ScheduleConflict[];
   messages: string[];
-  totalCredits: number;
 }
 
 export interface ScheduleConflict {
-  course1: Course;
-  course2: Course;
-  conflictingSlots: {
-    slot1: TimeSlot;
-    slot2: TimeSlot;
-  };
+  slot1: Schedule;
+  slot2: Schedule;
+  message: string;
 }

@@ -4,7 +4,7 @@ import type { Course } from '@/types/course';
 
 interface CacheConfig {
   maxSize: number;       // Maximum size in bytes
-  ttl: number;          // Time To Live in milliseconds
+  ttl: number;           // Time To Live in milliseconds
   invalidationInterval?: number; // Cache cleanup interval
 }
 
@@ -33,20 +33,24 @@ interface CacheEntry<T> {
 
 export class OptimizedCacheManager<T> {
   private cache: Map<string, CacheEntry<T>>;
+  private readonly maxSize: number;
+  private readonly ttl: number;
   private metrics: CacheMetrics;
   private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(private config: CacheConfig) {
+  constructor(config: CacheConfig) {
     this.cache = new Map();
+    this.maxSize = config.maxSize;
+    this.ttl = config.ttl;
     this.metrics = {
       hitCount: 0,
       missCount: 0,
       evictionCount: 0,
-      totalSize: 0,
+      totalSize: 0
     };
 
     if (config.invalidationInterval) {
-      this.startCleanup();
+      this.startCleanup(config.invalidationInterval);
     }
   }
 
@@ -70,11 +74,11 @@ export class OptimizedCacheManager<T> {
     return entry.value;
   }
 
-  async set(key: string, value: T, ttl?: number): Promise<void> {
+  async set(key: string, value: T, options?: { ttl?: number }): Promise<void> {
     const size = this.calculateSize(value);
 
-    // Ensure there's enough space for the new entry
-    while (this.metrics.totalSize + size > this.config.maxSize) {
+    // 공간 확보
+    while (this.metrics.totalSize + size > this.maxSize) {
       const evicted = this.evictLRU();
       if (!evicted) break;
     }
@@ -82,9 +86,9 @@ export class OptimizedCacheManager<T> {
     const entry: CacheEntry<T> = {
       value,
       size,
-      lastAccessed: Date.now(),
-      expiresAt: Date.now() + (ttl || this.config.ttl),
       hits: 0,
+      lastAccessed: Date.now(),
+      expiresAt: Date.now() + (options?.ttl || this.ttl)
     };
 
     const existingEntry = this.cache.get(key);
@@ -109,36 +113,18 @@ export class OptimizedCacheManager<T> {
     this.metrics.totalSize = 0;
   }
 
-  getStats() {
+  getStats(): CacheStats {
     const hitRate =
       this.metrics.hitCount /
-        (this.metrics.hitCount + this.metrics.missCount) ||
-      0;
+        (this.metrics.hitCount + this.metrics.missCount) || 0;
 
     return {
       size: this.metrics.totalSize,
       itemCount: this.cache.size,
       hitRate,
       evictionCount: this.metrics.evictionCount,
-      utilizationRate: this.metrics.totalSize / this.config.maxSize,
+      utilizationRate: this.metrics.totalSize / this.maxSize
     };
-  }
-
-  invalidatePattern(pattern: RegExp): void {
-    for (const key of this.cache.keys()) {
-      if (pattern.test(key)) {
-        this.delete(key);
-      }
-    }
-  }
-
-  private calculateSize(value: T): number {
-    try {
-      const str = JSON.stringify(value);
-      return new Blob([str]).size;
-    } catch {
-      return 0;
-    }
   }
 
   private evictLRU(): boolean {
@@ -153,18 +139,23 @@ export class OptimizedCacheManager<T> {
     }
 
     if (oldestKey) {
-      const entry = this.cache.get(oldestKey);
       this.delete(oldestKey);
-      if (entry) {
-        this.metrics.evictionCount++;
-        return true;
-      }
+      this.metrics.evictionCount++;
+      return true;
     }
 
     return false;
   }
 
-  private startCleanup(): void {
+  private calculateSize(value: T): number {
+    try {
+      return new Blob([JSON.stringify(value)]).size;
+    } catch {
+      return 0;
+    }
+  }
+
+  private startCleanup(interval: number): void {
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.cache.entries()) {
@@ -172,12 +163,13 @@ export class OptimizedCacheManager<T> {
           this.delete(key);
         }
       }
-    }, this.config.invalidationInterval || 60000);
+    }, interval);
   }
 
   destroy(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
     }
   }
 }

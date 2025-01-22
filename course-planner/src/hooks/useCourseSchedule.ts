@@ -20,11 +20,6 @@ export function useCourseSchedule({ courseId, initialSchedule = [] }: {
     setError(null);
 
     try {
-      console.log('Updating schedule:', {
-        courseId,
-        newSchedule
-      });
-
       const response = await fetch(`/api/courses/${courseId}/schedule`, {
         method: 'PUT',
         headers: {
@@ -36,17 +31,17 @@ export function useCourseSchedule({ courseId, initialSchedule = [] }: {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || data.details || 'Failed to update schedule');
+        const errorMessage = data.error || data.details || 'Failed to update schedule';
+        throw new Error(errorMessage);
       }
 
       setSchedule(data);
       return data;
 
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update schedule';
-      console.error('Error in PUT request:', err);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update schedule';
       setError(errorMessage);
-      throw err;
+      throw error;
 
     } finally {
       setIsLoading(false);

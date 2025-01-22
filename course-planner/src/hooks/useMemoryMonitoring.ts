@@ -1,22 +1,28 @@
-import { useState, useCallback, useEffect } from 'react';
-import { MemoryMonitor, type MemoryStats, type MemoryLeak } from '@/lib/performance/memoryMonitor';
+// src/hooks/useMemoryMonitoring.ts
+
+import { useState, useEffect, useCallback } from 'react';
+import { MemoryMonitor } from '@/lib/performance/memoryMonitor';
 
 interface UseMemoryMonitoringOptions {
-  onLeak?: (leak: MemoryLeak) => void;
+  componentName: string;
   warningThreshold?: number;
   monitoringInterval?: number;
-  componentName?: string;
+  onLeak?: (leak: any) => void;
 }
 
-export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
-  const [memoryData, setMemoryData] = useState<{
-    stats: MemoryStats[];
-    leaks: MemoryLeak[];
-  }>({ stats: [], leaks: [] });
-  const [isMonitoring, setIsMonitoring] = useState(false);
+interface OperationMetrics {
+  name: string;
+  duration: number;
+  category: 'api' | 'computation' | 'io';
+  timestamp: number;
+}
 
+export function useMemoryMonitoring(options: UseMemoryMonitoringOptions) {
+  const [memoryStats, setMemoryStats] = useState<any[]>([]);
+  const [detectedLeaks, setDetectedLeaks] = useState<any[]>([]);
   const monitor = MemoryMonitor.getInstance();
 
+  // trackOperation 수정
   const trackOperation = useCallback(async <T>(
     name: string,
     category: 'api' | 'computation' | 'io',
@@ -27,43 +33,49 @@ export function useMemoryMonitoring(options: UseMemoryMonitoringOptions = {}) {
       return await operation();
     } finally {
       const duration = performance.now() - startTime;
-      const currentData = monitor.getCurrentData();
-      const usageRatio = currentData.stats.usedJSHeapSize / currentData.stats.jsHeapSize;
-      
-      if (usageRatio > (options.warningThreshold || 0.8)) {
-        console.warn(`High memory usage detected during ${name}: ${(usageRatio * 100).toFixed(1)}%`);
-      }
+      // 직접 메모리 상태 업데이트
+      setMemoryStats(prev => [...prev.slice(-29), {
+        name: `${options.componentName}.${name}`,
+        duration,
+        category,
+        timestamp: Date.now()
+      }]);
     }
-  }, [options.warningThreshold]);
+  }, [options.componentName]);
 
+  // 메모리 리크 감지 이벤트 핸들러
   useEffect(() => {
-    const unsubscribe = monitor.subscribe(
-      options.componentName || 'default',
-      (data) => {
-        setMemoryData(prev => ({
-          stats: [...prev.stats, data.stats],
-          leaks: data.leaks
-        }));
+    const handleMemoryLeak = (event: CustomEvent) => {
+      const leak = event.detail;
+      setDetectedLeaks(prev => [...prev, leak]);
+      options.onLeak?.(leak);
+    };
 
-        if (data.leaks.length > 0 && options.onLeak) {
-          data.leaks.forEach(options.onLeak);
-        }
-      }
-    );
-
-    monitor.startMonitoring();
-    setIsMonitoring(true);
+    window.addEventListener('memory-leak', handleMemoryLeak as EventListener);
 
     return () => {
-      unsubscribe();
-      monitor.stopMonitoring();
-      setIsMonitoring(false);
+      window.removeEventListener('memory-leak', handleMemoryLeak as EventListener);
     };
-  }, [options.componentName, options.onLeak]);
+  }, [options.onLeak]);
+
+  // 모니터링 인터벌
+  useEffect(() => {
+    let intervalId: number | undefined = undefined;
+
+    intervalId = window.setInterval(() => {
+      setMemoryStats(monitor.getMemoryStats().slice(-30));
+    }, options.monitoringInterval || 5000);
+
+    return () => {
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [options.monitoringInterval]);
 
   return {
-    memoryData,
-    isMonitoring,
+    memoryStats,
+    detectedLeaks,
     trackOperation
   };
 }

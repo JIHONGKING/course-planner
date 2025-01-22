@@ -46,13 +46,18 @@ export default function CoursePlanner() {
   }, []);
 
 
-  const handleDrop = useCallback((courseId: string, targetSemesterId: string) => {
-    trackOperation(
-      'moveCourse',
-      'computation',
-      async () => moveCourse(courseId, '', targetSemesterId)  // fromSemesterId 추가
-    );
-  }, [moveCourse, trackOperation]);
+  // handleDrop 함수 시그니처 변경
+const handleDrop = useCallback((courseId: string, targetSemesterId: string) => {
+  // sourceSemesterId는 더 이상 필요하지 않음
+  console.log('Handling drop:', { courseId, targetSemesterId });
+  
+  try {
+    // moveCourse를 호출할 때 빈 문자열을 sourceSemesterId로 전달
+    moveCourse(courseId, '', targetSemesterId);
+  } catch (error) {
+    console.error('Error moving course:', error);
+  }
+}, [moveCourse]);
 
   // 향상된 검색 핸들러
   const handleSearch = useCallback(async (term: string) => {
